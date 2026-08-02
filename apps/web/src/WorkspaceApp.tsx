@@ -14,6 +14,7 @@ import {
   CaretDown,
   ChatCenteredDots,
   Code,
+  Confetti,
   Compass,
   Copy,
   FileText,
@@ -26,9 +27,11 @@ import {
   MagnifyingGlass,
   Microphone,
   Mountains,
+  MonitorArrowUp,
   Paperclip,
   PaperPlaneRight,
   Planet,
+  PhoneDisconnect,
   Plus,
   PushPin,
   Smiley,
@@ -37,6 +40,7 @@ import {
   UserPlus,
   Users,
   UploadSimple,
+  VideoCameraSlash,
   Waveform,
   X,
 } from '@phosphor-icons/react';
@@ -53,7 +57,11 @@ import {
   type MessagingRepository,
   type ReplyReference,
 } from './messaging.js';
-import { VoicePreviewPanel } from './voice-preview.js';
+import {
+  VOICE_QUICK_ACTION_EVENT,
+  VoicePreviewPanel,
+  type VoiceQuickAction,
+} from './voice-preview.js';
 import {
   AVATARS,
   DM_STORAGE_KEY,
@@ -204,6 +212,11 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
   const directMessages = conversations.filter(({ kind }) => kind === 'direct');
   const activeGroup = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
+  const joinedVoice = groups
+    .flatMap((group) =>
+      group.channels.map((channel) => ({ channel, group })),
+    )
+    .find(({ channel }) => channel.kind === 'voice' && channel.participantIds.includes(user.id));
   const selectedChannel = activeGroup?.channels.find(
     ({ conversationId }) => conversationId === selectedConversationId,
   );
@@ -492,23 +505,45 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     );
   };
 
+  const leaveVoiceChannel = () => {
+    setGroups((current) =>
+      current.map((group) => ({
+        ...group,
+        channels: group.channels.map((channel) => ({
+          ...channel,
+          participantIds: channel.participantIds.filter((id) => id !== user.id),
+        })),
+      })),
+    );
+    setLocalSpeaking(false);
+  };
+
+  const runVoiceQuickAction = (action: VoiceQuickAction) => {
+    if (joinedVoice && selectedConversationId !== joinedVoice.channel.conversationId) {
+      setActiveGroupId(joinedVoice.group.id);
+      setActiveSurface('groups');
+      setSelectedConversationId(joinedVoice.channel.conversationId);
+      window.setTimeout(
+        () => window.dispatchEvent(new CustomEvent(VOICE_QUICK_ACTION_EVENT, { detail: action })),
+        0,
+      );
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(VOICE_QUICK_ACTION_EVENT, { detail: action }));
+  };
+
   const joinVoiceChannel = (conversationId: string) => {
     setGroups((current) =>
-      current.map((group) =>
-        group.id !== activeGroup?.id
-          ? group
-          : {
-              ...group,
-              channels: group.channels.map((channel) =>
-                channel.conversationId !== conversationId
-                  ? channel
-                  : {
-                      ...channel,
-                      participantIds: Array.from(new Set([...channel.participantIds, user.id])),
-                    },
-              ),
-            },
-      ),
+      current.map((group) => ({
+        ...group,
+        channels: group.channels.map((channel) => ({
+          ...channel,
+          participantIds:
+            channel.conversationId === conversationId
+              ? Array.from(new Set([...channel.participantIds, user.id]))
+              : channel.participantIds.filter((id) => id !== user.id),
+        })),
+      })),
     );
     selectConversation(conversationId, 'groups');
     setVoiceChatOpen(false);
@@ -669,6 +704,15 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               </nav>
             ) : null}
           </div>
+
+          {joinedVoice ? (
+            <VoiceConnectionPanel
+              channelName={joinedVoice.channel.name}
+              groupName={joinedVoice.group.name}
+              onAction={runVoiceQuickAction}
+              onLeave={leaveVoiceChannel}
+            />
+          ) : null}
 
           <footer className="user-panel">
             <button
@@ -957,6 +1001,49 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         />
       ) : null}
     </main>
+  );
+}
+
+function VoiceConnectionPanel({
+  channelName,
+  groupName,
+  onAction,
+  onLeave,
+}: {
+  channelName: string;
+  groupName: string;
+  onAction: (action: VoiceQuickAction) => void;
+  onLeave: () => void;
+}) {
+  return (
+    <section className="voice-connection-panel" aria-label="Voice connection controls">
+      <div className="voice-connection-status">
+        <span className="voice-connection-mark">
+          <Waveform size={20} weight="bold" />
+        </span>
+        <span>
+          <strong>Voice Connected</strong>
+          <small>{channelName} / {groupName}</small>
+        </span>
+        <button type="button" aria-label="Disconnect from voice" onClick={onLeave}>
+          <PhoneDisconnect size={19} weight="fill" />
+        </button>
+      </div>
+      <div className="voice-quick-actions">
+        <button type="button" aria-label="Toggle camera" onClick={() => onAction('camera')}>
+          <VideoCameraSlash size={20} />
+        </button>
+        <button type="button" aria-label="Share screen or application" onClick={() => onAction('share')}>
+          <MonitorArrowUp size={20} />
+        </button>
+        <button type="button" aria-label="Open soundboard" onClick={() => onAction('soundboard')}>
+          <Confetti size={20} />
+        </button>
+        <button type="button" aria-label="Open voice settings" onClick={() => onAction('settings')}>
+          <GearSix size={20} />
+        </button>
+      </div>
+    </section>
   );
 }
 

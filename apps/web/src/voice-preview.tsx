@@ -23,6 +23,9 @@ export interface CallParticipant {
   name: string;
 }
 
+export type VoiceQuickAction = 'camera' | 'settings' | 'share' | 'soundboard';
+export const VOICE_QUICK_ACTION_EVENT = 'scuttlebutt:voice-quick-action';
+
 type InputMode = 'push-to-talk' | 'voice-activity';
 type InputProfile = 'custom' | 'isolation' | 'studio';
 
@@ -283,6 +286,18 @@ export function VoicePreviewPanel({
     oscillator.start();
     oscillator.stop(context.currentTime + 0.28);
   };
+
+  useEffect(() => {
+    const handleQuickAction = (event: Event) => {
+      const action = (event as CustomEvent<VoiceQuickAction>).detail;
+      if (action === 'camera') void toggleCamera();
+      if (action === 'share') void toggleShare();
+      if (action === 'soundboard') setSoundboardOpen((value) => !value);
+      if (action === 'settings') setSettingsOpen(true);
+    };
+    window.addEventListener(VOICE_QUICK_ACTION_EVENT, handleQuickAction);
+    return () => window.removeEventListener(VOICE_QUICK_ACTION_EVENT, handleQuickAction);
+  });
 
   if (!connected) {
     return (

@@ -524,6 +524,86 @@ img {
   background: #273151;
 }
 
+.voice-connection-panel {
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  background: #10161f;
+}
+
+.voice-connection-status {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-connection-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--success);
+  background: rgb(71 199 139 / 10%);
+}
+
+.voice-connection-status strong,
+.voice-connection-status small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-connection-status strong {
+  color: var(--success);
+  font-size: 0.72rem;
+}
+
+.voice-connection-status small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.voice-connection-status > button,
+.voice-quick-actions button {
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--muted);
+}
+
+.voice-connection-status > button {
+  width: 32px;
+  height: 32px;
+}
+
+.voice-connection-status > button:hover {
+  color: var(--danger);
+  background: rgb(237 110 117 / 10%);
+}
+
+.voice-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.voice-quick-actions button {
+  min-width: 0;
+  height: 35px;
+  border: 1px solid var(--line);
+  background: #191f2a;
+}
+
+.voice-quick-actions button:hover {
+  color: var(--text);
+  border-color: #3b465a;
+  background: #242c3b;
+}
+
 .user-panel {
   position: relative;
   display: grid;
