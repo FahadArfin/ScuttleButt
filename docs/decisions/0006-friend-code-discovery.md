@@ -1,6 +1,6 @@
 # ADR-0006: Friend-code discovery
 
-- Status: Accepted for Phase 3 design, not implemented in Phase 1
+- Status: Accepted; Phase 3 domain foundation implemented, API/storage integration pending
 - Date: 2026-08-02
 
 ## Context
@@ -21,3 +21,13 @@ QR codes and invitation links carry the friend code or an expiring invitation to
 - A code that leaks must be revocable without changing the Matrix account.
 - Lookup telemetry must be minimized and protected because timing and approval events can still reveal relationships.
 - Phase 3 must test enumeration resistance and rate-limit behavior before release.
+
+## Phase 3 foundation behavior
+
+- Codes use a 32-symbol human-safe alphabet that excludes ambiguous characters, with 16 symbols (80 bits of entropy) per code.
+- Input is normalized with Unicode compatibility normalization, case folding, and removal of spaces/hyphens before exact lookup.
+- The in-memory Phase 3 store keeps an HMAC-SHA-256 digest, not the raw code. The HMAC key must contain at least 32 bytes and is supplied by the service owner.
+- Code submission always returns the same shaped accepted-for-processing response and never returns the target Matrix ID. Unknown, malformed, revoked, self, duplicate, and blocked codes create no actionable request.
+- A recipient sees only an opaque pending request. The peer Matrix ID is returned only after the recipient accepts the request.
+- Lookup attempts are rate limited per caller key. The eventual API adapter must combine authenticated principal and network/device signals when choosing that key.
+- Invitation URLs carry only the formatted friend code. QR rendering is a client presentation concern; passwords, access tokens, Matrix access credentials, and private keys are never placed in the URL.

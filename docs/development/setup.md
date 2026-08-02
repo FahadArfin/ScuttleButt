@@ -80,4 +80,4 @@ Build output is generated under package `dist/` directories and is ignored by Gi
 
 ## Phase boundary
 
-Phase 2 is complete. Do not add friend codes, contacts, the full messaging interface, communities, calls, uploads, desktop, mobile, or production deployment work to this task. Those belong to later roadmap phases and require their own acceptance criteria.
+Phase 3 friend-code/contact domain work is in progress. Do not add the full messaging interface, communities, calls, uploads, desktop, mobile, or production deployment work to this task. Persistent contact storage and authenticated API wiring require their own acceptance criteria before this phase is complete.

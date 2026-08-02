@@ -4,7 +4,7 @@ Scuttlebutt is planned as an open-source, self-hosted communication app with fed
 
 ## Project status
 
-Phase 2 (local Matrix integration) is complete. The product UI and contact/community features are intentionally not implemented yet.
+Phase 3 friend-code/contact foundation is in progress. Phase 2 local Matrix integration is complete; the product UI and persistent contact API are intentionally not implemented yet.
 
 Start with:
 
@@ -19,6 +19,7 @@ Start with:
 - [Phase 1 report](docs/phase-1-report.md)
 - [Local Matrix environment](infrastructure/matrix/README.md)
 - [Phase 2 report](docs/phase-2-report.md)
+- [Phase 3 report](docs/phase-3-report.md)
 
 ## Development
 
@@ -49,7 +50,7 @@ The local Matrix homeserver is available at `http://127.0.0.1:8008` after the Ma
 
 ## Current boundary
 
-Phase 2 adds a local Synapse/PostgreSQL environment and a typed Matrix client boundary for registration, login, logout, session restore, device listing/revocation, encrypted direct-room creation, and encrypted text exchange. The UI is still a foundation shell; friend codes, community servers, calls, uploads, desktop, mobile, and production deployment remain future phases.
+Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. The UI, authenticated platform API routes, persistent storage, QR rendering, community servers, calls, uploads, desktop, mobile, and production deployment remain future work.
 
 ## Important terminology
 

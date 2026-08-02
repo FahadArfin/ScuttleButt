@@ -90,6 +90,12 @@ importers:
 
   packages/config: {}
 
+  packages/friend-codes:
+    devDependencies:
+      '@types/node':
+        specifier: 26.1.2
+        version: 26.1.2
+
   packages/matrix-client:
     dependencies:
       matrix-js-sdk:

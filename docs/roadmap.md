@@ -38,9 +38,11 @@ Add a local Synapse/PostgreSQL environment and implement the smallest verified f
 
 Acceptance checks passed on 2026-08-02. See [the Phase 2 report](phase-2-report.md).
 
-## Phase 3 — Friend codes and contacts
+## Phase 3 — Friend codes and contacts (foundation in progress)
 
 Add generation, normalization, lookup, QR/invite representations, contact requests, blocking, revocation/regeneration, rate limits, and anti-enumeration behavior. Resolve to Matrix identities only after the privacy model is documented.
+
+The domain foundation is implemented and tested in `@scuttlebutt/friend-codes`. Persistent storage, authenticated platform API routes, and client UI remain before this phase can be marked complete. See [the Phase 3 report](phase-3-report.md).
 
 ## Phase 4 — Messaging interface
 
