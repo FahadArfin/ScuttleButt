@@ -82,6 +82,8 @@ The Tauri shell, OS-keychain session boundary, capability allowlist, tray, deep-
 
 Add policy-controlled image/video uploads, thumbnails, GIF provider abstraction, animated profiles, custom emoji/stickers, quotas, and cleanup jobs.
 
+The dependency-free media/profile policy foundation is implemented and tested in `@scuttlebutt/media-profile`. Authenticated signed-storage routes, client-side encryption and processing, upload UI, and object-storage integration remain before this phase can be marked complete. See [the Phase 9 report](phase-9-report.md).
+
 ## Phase 10 — Administration and moderation
 
 Add reports, client-assisted encrypted-content reports, kick/ban/timeout, roles, audit log, invite and registration controls, retention, storage, and stream-quality policies.

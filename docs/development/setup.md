@@ -93,6 +93,7 @@ pnpm test:e2e
 - `packages/testing`: shared selectors and test constants.
 - `packages/matrix-client`: typed Matrix SDK boundary and local integration test.
 - `packages/livekit-client`: typed LiveKit voice/video boundary with E2EE, capture, fallback, and diagnostics helpers.
+- `packages/media-profile`: policy validation and processing plans for uploads, thumbnails, profiles, custom media, quotas, GIF providers, and cleanup candidates.
 - `apps/desktop`: Tauri shell that reuses the web frontend and owns the narrow native capability surface.
 - `packages/desktop-bridge`: shared web/desktop session, notification, deep-link, push-to-talk, and diagnostics contract.
 - `infrastructure/matrix`: Docker Compose and local Synapse setup instructions.
@@ -102,6 +103,6 @@ Build output is generated under package `dist/` directories and is ignored by Gi
 
 ## Phase boundary
 
-Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary, Phase 7 adds camera/display capture, fallback, fullscreen, and diagnostics, and Phase 8 adds the Tauri desktop boundary; a local LiveKit/Coturn stack and Rust/Tauri toolchain are still required for native media and desktop validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.
+Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary, Phase 7 adds camera/display capture, fallback, fullscreen, and diagnostics, Phase 8 adds the Tauri desktop boundary, and Phase 9 adds media/profile policy contracts. A local LiveKit/Coturn stack and Rust/Tauri toolchain are still required for native media and desktop validation. Do not treat attachment staging as an encrypted upload; the media package still needs authenticated storage, client-side processing, and object-storage integration.
 
 Start the local voice infrastructure with `pnpm voice:up` and stop it with `pnpm voice:down`. The web voice panel is a preview until a server-issued short-lived LiveKit token, a MatrixRTC membership check, and a dedicated E2EE worker are supplied.

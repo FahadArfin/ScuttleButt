@@ -141,6 +141,8 @@ importers:
         specifier: 26.1.2
         version: 26.1.2
 
+  packages/media-profile: {}
+
   packages/shared-types: {}
 
   packages/testing: {}
