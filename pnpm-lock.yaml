@@ -143,6 +143,8 @@ importers:
 
   packages/media-profile: {}
 
+  packages/moderation: {}
+
   packages/shared-types: {}
 
   packages/testing: {}

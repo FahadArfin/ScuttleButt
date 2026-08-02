@@ -88,6 +88,8 @@ The dependency-free media/profile policy foundation is implemented and tested in
 
 Add reports, client-assisted encrypted-content reports, kick/ban/timeout, roles, audit log, invite and registration controls, retention, storage, and stream-quality policies.
 
+The typed administration/moderation policy foundation is implemented and tested in `@scuttlebutt/moderation`, including role hierarchy, action records, client-assisted report disclosure, audit metadata guards, invite/registration controls, retention holds, storage decisions, and stream-quality fallback. Authenticated persistence, Matrix enforcement, operator UI, and distributed rate limiting remain before this phase can be marked complete. See [the Phase 10 report](phase-10-report.md).
+
 ## Phase 11 — Federation hardening
 
 Only after local flows are stable: test multiple homeservers, cross-server identities, rooms, DMs, invites, outage behavior, allow/block lists, signing-key handling, and partial failures.
