@@ -26,10 +26,14 @@ The Google Cloud project is `scuttlebutt-504320`. Confirm billing is attached, t
 
 ```powershell
 gcloud config set project scuttlebutt-504320
-.\infrastructure\gcp\deploy.ps1 -GoogleClientId YOUR_CLIENT_ID -DatabasePassword A_LONG_RANDOM_PASSWORD
+.\infrastructure\gcp\deploy.ps1 -GoogleClientId YOUR_CLIENT_ID -DatabasePassword A_LONG_RANDOM_PASSWORD -DeploymentSize test
 ```
 
-After the first deployment, copy the Cloud Run URL into the OAuth client's authorized JavaScript origins and redeploy with `WEB_ORIGIN` set to that exact HTTPS origin.
+`test` uses the smallest shared-core Cloud SQL tier and is not covered by the Cloud SQL SLA. Use `standard` for the larger instance. The script stores the database URL in Secret Manager, deploys the service, and updates `WEB_ORIGIN` to the resulting Cloud Run URL.
+
+Current test deployment: <https://scuttlebutt-d5v23kpsfa-ue.a.run.app>
+
+After the first deployment, copy the Cloud Run URL into the OAuth client's authorized JavaScript origins. The deployed service already uses that exact HTTPS origin for CORS.
 
 ## Voice production boundary
 

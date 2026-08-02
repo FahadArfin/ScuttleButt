@@ -1,6 +1,5 @@
 substitutions:
   _REGION: us-east1
-  _SERVICE: scuttlebutt
   _REPOSITORY: scuttlebutt
 steps:
   - name: gcr.io/cloud-builders/docker
