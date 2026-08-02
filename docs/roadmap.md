@@ -50,9 +50,11 @@ Build conversation list, timeline, composer, replies, edit/delete, reactions, at
 
 Acceptance checks passed on 2026-08-02. See [the Phase 4 report](phase-4-report.md). Browser session wiring and encrypted media transfer remain explicit integration boundaries.
 
-## Phase 5 — Community servers and channels
+## Phase 5 — Community servers and channels (foundation complete)
 
 Map communities to Matrix spaces/rooms. Add categories, text channels, membership, invites, small roles/permissions, pins, threads, custom emoji, and a clear user-facing distinction between “community server” and homeserver.
+
+The community domain and Matrix mapping foundation are implemented and tested. A live Synapse space/channel integration fixture and authenticated community API remain explicit follow-up work. See [the Phase 5 report](phase-5-report.md).
 
 ## Phase 6 — Voice proof of concept
 

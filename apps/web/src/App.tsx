@@ -18,6 +18,7 @@ import {
   type MessagingRepository,
   type ReplyReference,
 } from './messaging.js';
+import { DEMO_COMMUNITY, channelsForCategory } from './community.js';
 
 interface AppProps {
   repository?: MessagingRepository;
@@ -30,6 +31,22 @@ interface Notice {
 
 const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
 const QUICK_REACTIONS = ['❤️', '👍', '✨'];
+const CHANNEL_CONVERSATION_IDS: Record<string, string> = {
+  'channel-design': 'design',
+  'channel-huddle': 'huddle',
+  'channel-lounge': 'lounge',
+  'channel-welcome': 'welcome',
+};
+
+function channelIcon(kind: string): string {
+  if (kind === 'voice') {
+    return '◉';
+  }
+  if (kind === 'forum') {
+    return '✧';
+  }
+  return '#';
+}
 
 function formatFileSize(size: number): string {
   if (size < 1024) {
@@ -188,7 +205,9 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
         return;
       }
       setConversations(nextConversations);
-      setSelectedConversationId(nextConversations[0]?.id ?? '');
+      setSelectedConversationId(
+        nextConversations.find(({ id }) => id === 'lounge')?.id ?? nextConversations[0]?.id ?? '',
+      );
       setIsLoading(false);
     });
     return () => {
@@ -373,6 +392,20 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
 
       <div className="workspace-layout">
         <aside className="conversation-sidebar" aria-label="Conversations">
+          <button
+            type="button"
+            className="community-card"
+            aria-label="Open Northstar Lab community details"
+          >
+            <span className="community-card-mark">N</span>
+            <span>
+              <strong>{DEMO_COMMUNITY.name}</strong>
+              <small>Community server</small>
+            </span>
+            <span className="community-card-menu" aria-hidden="true">
+              •••
+            </span>
+          </button>
           <div className="sidebar-heading">
             <div>
               <p className="section-kicker">Workspace</p>
@@ -407,33 +440,70 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
             data-testid={E2E_SELECTORS.conversationList}
             aria-label="Conversation list"
           >
-            {conversations.map((conversation) => (
-              <button
-                type="button"
-                className={`conversation-button ${conversation.id === selectedConversationId ? 'conversation-button-active' : ''}`}
-                key={conversation.id}
-                onClick={() => selectConversation(conversation.id)}
-                aria-current={conversation.id === selectedConversationId ? 'page' : undefined}
-              >
-                <span className={`conversation-avatar conversation-avatar-${conversation.kind}`}>
-                  {conversation.avatarLabel}
-                </span>
-                <span className="conversation-copy">
-                  <span className="conversation-title-row">
-                    <strong>
-                      {conversation.kind === 'channel'
-                        ? `# ${conversation.title}`
-                        : conversation.title}
-                    </strong>
-                    <time>{conversation.updatedAt}</time>
-                  </span>
-                  <span className="conversation-preview">{conversation.preview}</span>
-                </span>
-                {conversation.unreadCount > 0 ? (
-                  <span className="unread-badge">{conversation.unreadCount}</span>
-                ) : null}
-              </button>
+            {DEMO_COMMUNITY.categories.map((category) => (
+              <div className="channel-category" key={category.id}>
+                <div className="channel-category-heading">
+                  <span>{category.name}</span>
+                  <button type="button" aria-label={`Add a channel to ${category.name}`}>
+                    +
+                  </button>
+                </div>
+                {channelsForCategory(DEMO_COMMUNITY, category.id).map((channel) => {
+                  const conversationId = CHANNEL_CONVERSATION_IDS[channel.id];
+                  const conversation = conversations.find(({ id }) => id === conversationId);
+                  if (!conversation) {
+                    return null;
+                  }
+                  return (
+                    <button
+                      type="button"
+                      className={`channel-button ${conversation.id === selectedConversationId ? 'channel-button-active' : ''}`}
+                      key={channel.id}
+                      onClick={() => selectConversation(conversation.id)}
+                      aria-current={conversation.id === selectedConversationId ? 'page' : undefined}
+                    >
+                      <span aria-hidden="true">{channelIcon(channel.kind)}</span>
+                      <span className="channel-button-name">{channel.name}</span>
+                      {conversation.unreadCount > 0 ? (
+                        <span className="unread-badge">{conversation.unreadCount}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
             ))}
+            <div className="channel-category direct-message-category">
+              <div className="channel-category-heading">
+                <span>Direct messages</span>
+                <button type="button" aria-label="Start a direct message">
+                  +
+                </button>
+              </div>
+              {conversations
+                .filter(({ kind }) => kind === 'direct')
+                .map((conversation) => (
+                  <button
+                    type="button"
+                    className={`conversation-button ${conversation.id === selectedConversationId ? 'conversation-button-active' : ''}`}
+                    key={conversation.id}
+                    onClick={() => selectConversation(conversation.id)}
+                    aria-current={conversation.id === selectedConversationId ? 'page' : undefined}
+                  >
+                    <span
+                      className={`conversation-avatar conversation-avatar-${conversation.kind}`}
+                    >
+                      {conversation.avatarLabel}
+                    </span>
+                    <span className="conversation-copy">
+                      <span className="conversation-title-row">
+                        <strong>{conversation.title}</strong>
+                        <time>{conversation.updatedAt}</time>
+                      </span>
+                      <span className="conversation-preview">{conversation.preview}</span>
+                    </span>
+                  </button>
+                ))}
+            </div>
           </nav>
           <div className="sidebar-footer">
             <span className="privacy-lock" aria-hidden="true">
@@ -649,6 +719,13 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
               <strong>Private</strong>
               <span>Visibility</span>
             </div>
+          </div>
+          <div className="details-section">
+            <h3>Community server</h3>
+            <p className="details-note">
+              {DEMO_COMMUNITY.name} is a Matrix space on {DEMO_COMMUNITY.homeserverUrl}. It is not
+              the homeserver itself.
+            </p>
           </div>
           <div className="details-section">
             <h3>Shared space</h3>

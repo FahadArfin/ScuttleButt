@@ -11,6 +11,23 @@ import {
 
 export { MatrixMessagingAdapter, mapMatrixTimelineEvent } from './messaging.js';
 export type { MatrixTimelineMessage } from './messaging.js';
+export {
+  MatrixCommunityAdapter,
+  createCommunityChannelOptions,
+  createCommunitySpaceOptions,
+  createCustomEmojiEvent,
+  createPinnedEventsContent,
+  createPowerLevelOverride,
+  createSpaceChildEvent,
+  createSpaceParentEvent,
+} from './community.js';
+export type {
+  CommunityChannelInput,
+  CommunitySpaceInput,
+  MatrixCustomEmojiEvent,
+  MatrixSpaceChildEvent,
+  MatrixSpaceParentEvent,
+} from './community.js';
 
 export interface MatrixSession {
   homeserverUrl: string;

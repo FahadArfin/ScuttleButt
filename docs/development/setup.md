@@ -80,4 +80,4 @@ Build output is generated under package `dist/` directories and is ignored by Gi
 
 ## Phase boundary
 
-Phase 4 messaging interface work is complete. The default web preview uses a deterministic local repository while browser login/session restoration is wired to the Phase 2 Matrix client. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase. Persistent contact storage and authenticated API wiring require their own acceptance criteria before those boundaries are complete.
+Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary; a local LiveKit/Coturn stack is still required for real media validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.

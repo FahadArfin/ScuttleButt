@@ -68,6 +68,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@scuttlebutt/community':
+        specifier: workspace:*
+        version: link:../../packages/community
       '@scuttlebutt/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -88,6 +91,8 @@ importers:
         specifier: 6.0.5
         version: 6.0.5(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.8.1))
 
+  packages/community: {}
+
   packages/config: {}
 
   packages/friend-codes:
@@ -98,6 +103,9 @@ importers:
 
   packages/matrix-client:
     dependencies:
+      '@scuttlebutt/community':
+        specifier: workspace:*
+        version: link:../community
       matrix-js-sdk:
         specifier: 42.0.0
         version: 42.0.0

@@ -1,3 +1,5 @@
+import type { CommunityChannelKind } from '@scuttlebutt/community';
+
 export type ConversationKind = 'channel' | 'direct';
 export type MessageStatus = 'failed' | 'sending' | 'sent';
 
@@ -12,6 +14,10 @@ export interface Conversation {
   unreadCount: number;
   encrypted: boolean;
   members: number;
+  categoryId?: string;
+  categoryName?: string;
+  channelKind?: CommunityChannelKind;
+  voiceRoomId?: string;
 }
 
 export interface ReplyReference {
@@ -67,6 +73,21 @@ const currentUser = {
 
 const initialConversations: Conversation[] = [
   {
+    id: 'welcome',
+    title: 'Welcome',
+    kind: 'channel',
+    avatarLabel: '!',
+    presence: 'Announcements only',
+    preview: 'Community guidelines and updates.',
+    updatedAt: 'Mon',
+    unreadCount: 0,
+    encrypted: true,
+    members: 18,
+    categoryId: 'cat-start',
+    categoryName: 'Start here',
+    channelKind: 'announcement',
+  },
+  {
     id: 'lounge',
     title: 'Lounge',
     kind: 'channel',
@@ -77,6 +98,9 @@ const initialConversations: Conversation[] = [
     unreadCount: 2,
     encrypted: true,
     members: 18,
+    categoryId: 'cat-start',
+    categoryName: 'Start here',
+    channelKind: 'text',
   },
   {
     id: 'jordan',
@@ -101,10 +125,30 @@ const initialConversations: Conversation[] = [
     unreadCount: 0,
     encrypted: true,
     members: 5,
+    categoryId: 'cat-build',
+    categoryName: 'Build together',
+    channelKind: 'forum',
+  },
+  {
+    id: 'huddle',
+    title: 'Huddle',
+    kind: 'channel',
+    avatarLabel: '◉',
+    presence: 'Voice room · 3 seats open',
+    preview: 'Drop in for a quick sync.',
+    updatedAt: 'Now',
+    unreadCount: 0,
+    encrypted: true,
+    members: 3,
+    categoryId: 'cat-build',
+    categoryName: 'Build together',
+    channelKind: 'voice',
+    voiceRoomId: 'northstar-huddle',
   },
 ];
 
 const initialMessages: Record<string, Message[]> = {
+  welcome: [],
   lounge: [
     {
       id: 'lounge-1',

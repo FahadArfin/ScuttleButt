@@ -4,7 +4,7 @@ Scuttlebutt is planned as an open-source, self-hosted communication app with fed
 
 ## Project status
 
-Phase 4 messaging interface is complete. Phase 2 local Matrix integration and the Phase 3 friend-code/contact foundation are available as separate, tested boundaries; browser session wiring and persistent contact API routes are still intentionally staged.
+Phase 5 community-server/channel foundation is complete. Phase 6 voice proof-of-concept work is next; browser session wiring, live SFU validation, and persistent contact API routes remain intentionally staged.
 
 Start with:
 
@@ -21,6 +21,7 @@ Start with:
 - [Phase 2 report](docs/phase-2-report.md)
 - [Phase 3 report](docs/phase-3-report.md)
 - [Phase 4 report](docs/phase-4-report.md)
+- [Phase 5 report](docs/phase-5-report.md)
 
 ## Development
 
@@ -51,7 +52,7 @@ The local Matrix homeserver is available at `http://127.0.0.1:8008` after the Ma
 
 ## Current boundary
 
-Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. Phase 4 adds the messaging workspace and a typed Matrix messaging adapter boundary. The browser login/session screen, persistent contact API, QR rendering, community servers, calls, encrypted media uploads, desktop, mobile, and production deployment remain future work.
+Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. Phase 4 adds the messaging workspace and Phase 5 adds the community-server/channel foundation and Matrix space mapping. Browser login/session wiring, authenticated contact/community APIs, live voice/SFU validation, QR rendering, encrypted media uploads, desktop, mobile, and production deployment remain future work.
 
 ## Important terminology
 

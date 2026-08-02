@@ -219,6 +219,59 @@ textarea:focus-visible {
   border-right: 1px solid var(--line);
 }
 
+.community-card {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  color: var(--text);
+  background: linear-gradient(135deg, rgba(93, 121, 204, 0.19), rgba(255, 255, 255, 0.025));
+  text-align: left;
+}
+
+.community-card:hover {
+  border-color: var(--line-strong);
+}
+
+.community-card-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.55rem;
+  color: #142039;
+  background: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.community-card strong,
+.community-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-card strong {
+  font-size: 0.7rem;
+}
+
+.community-card small {
+  margin-top: 0.17rem;
+  color: var(--subtle);
+  font-size: 0.57rem;
+}
+
+.community-card-menu {
+  color: var(--subtle);
+  font-size: 0.72rem;
+}
+
 .sidebar-heading {
   justify-content: space-between;
   padding: 0 0.45rem;
@@ -288,6 +341,81 @@ kbd {
   display: grid;
   gap: 0.25rem;
   overflow: auto;
+}
+
+.channel-category {
+  display: grid;
+  gap: 0.1rem;
+  margin-top: 0.7rem;
+}
+
+.channel-category:first-child {
+  margin-top: 0.1rem;
+}
+
+.channel-category-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.45rem 0.25rem;
+  color: var(--subtle);
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.channel-category-heading button {
+  display: grid;
+  width: 1.2rem;
+  height: 1.2rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0.3rem;
+  color: var(--subtle);
+  background: transparent;
+}
+
+.channel-category-heading button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.channel-button {
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.36rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.7rem;
+  text-align: left;
+}
+
+.channel-button:hover,
+.channel-button-active {
+  border-color: var(--line);
+  color: #e2e7f1;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.channel-button-active {
+  box-shadow: inset 2px 0 0 var(--accent-strong);
+}
+
+.channel-button-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.direct-message-category {
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
 }
 
 .conversation-button {
@@ -875,6 +1003,13 @@ kbd {
   text-align: center;
 }
 
+.details-note {
+  margin: 0.4rem 0 0;
+  color: var(--subtle);
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
 .details-sidebar > h2 {
   margin: 0;
   color: #e5e9f1;
@@ -989,6 +1124,8 @@ kbd {
   }
 
   .sidebar-heading > div,
+  .community-card > span:not(.community-card-mark),
+  .channel-category-heading,
   .search-field input,
   .search-field kbd,
   .sidebar-footer span:last-child,
@@ -1000,6 +1137,12 @@ kbd {
   .search-field {
     margin-top: 1.4rem;
     padding: 0.6rem;
+  }
+
+  .community-card {
+    display: flex;
+    justify-content: center;
+    padding: 0.45rem;
   }
 
   .conversation-button {

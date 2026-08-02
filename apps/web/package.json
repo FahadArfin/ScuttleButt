@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@scuttlebutt/community": "workspace:*",
     "@scuttlebutt/shared-types": "workspace:*",
     "@scuttlebutt/testing": "workspace:*",
     "@scuttlebutt/ui": "workspace:*",

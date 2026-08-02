@@ -1,5 +1,5 @@
 {
-  "name": "@scuttlebutt/matrix-client",
+  "name": "@scuttlebutt/community",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,14 +13,6 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "dependencies": {
-    "@scuttlebutt/community": "workspace:*",
-    "matrix-js-sdk": "42.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "26.1.2"
   }
 }
