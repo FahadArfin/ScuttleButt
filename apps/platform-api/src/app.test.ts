@@ -17,4 +17,16 @@ describe('platform API', () => {
 
     await app.close();
   });
+
+  it('requires configured authentication for cloud synchronization', async () => {
+    const app = buildApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/workspace/load',
+      payload: { credential: 'missing' },
+    });
+
+    expect(response.statusCode).toBe(503);
+    await app.close();
+  });
 });

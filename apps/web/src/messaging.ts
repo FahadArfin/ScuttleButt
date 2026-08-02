@@ -36,6 +36,7 @@ export interface AttachmentDraft {
 export interface Message {
   id: string;
   senderId: string;
+  senderAvatar?: string;
   senderName: string;
   senderInitials: string;
   body: string;
@@ -391,4 +392,136 @@ export function createDemoMessagingRepository(user?: { id: string; name: string 
       return cloneMessage(message);
     },
   };
+}
+
+async function syncRequest<T>(
+  path: string,
+  credential: string,
+  body: Record<string, unknown> = {},
+  method = 'POST',
+): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ credential, ...body }),
+  });
+  if (!response.ok) throw new Error('Cloud synchronization failed. Please sign in again.');
+  return response.json() as Promise<T>;
+}
+
+export function createSyncedMessagingRepository(
+  credential: string,
+  user: { id: string; name: string },
+): MessagingRepository {
+  const initials = user.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+  const normalizeMessage = (message: Message): Message => ({
+    ...message,
+    own: message.senderId === user.id,
+  });
+
+  return {
+    async createConversation(conversation) {
+      const result = await syncRequest<{ conversation: Conversation }>(
+        '/api/sync/conversations',
+        credential,
+        { conversation },
+      );
+      return result.conversation;
+    },
+
+    async getConversations() {
+      const result = await syncRequest<{ conversations: Conversation[] }>(
+        '/api/sync/conversations/list',
+        credential,
+      );
+      return result.conversations;
+    },
+
+    async getMessages(conversationId) {
+      const result = await syncRequest<{ messages: Message[] }>(
+        '/api/sync/messages/list',
+        credential,
+        { conversationId },
+      );
+      return result.messages.map(normalizeMessage);
+    },
+
+    async sendMessage(conversationId, body, options = {}) {
+      const message: Message = {
+        id: `${conversationId}-${crypto.randomUUID()}`,
+        senderId: user.id,
+        senderName: user.name,
+        senderInitials: initials,
+        body,
+        sentAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        status: 'sent',
+        edited: false,
+        own: true,
+        replyTo: options.replyTo,
+        attachments: options.attachments ? [...options.attachments] : [],
+        reactions: {},
+      };
+      const result = await syncRequest<{ message: Message }>(
+        '/api/sync/messages',
+        credential,
+        { conversationId, message },
+      );
+      return normalizeMessage(result.message);
+    },
+
+    async editMessage(conversationId, messageId, body) {
+      await syncRequest('/api/sync/messages/edit', credential, {
+        conversationId,
+        messageId,
+        value: body,
+      }, 'PATCH');
+    },
+
+    async deleteMessage(conversationId, messageId) {
+      await syncRequest('/api/sync/messages', credential, { conversationId, messageId }, 'DELETE');
+    },
+
+    async reactToMessage(conversationId, messageId, emoji) {
+      await syncRequest('/api/sync/messages/react', credential, {
+        conversationId,
+        messageId,
+        value: emoji,
+      });
+    },
+
+    async markRead() {
+      return undefined;
+    },
+
+    async setTyping() {
+      return undefined;
+    },
+
+    async retryMessage(conversationId, messageId) {
+      const messages = await this.getMessages(conversationId);
+      const message = messages.find(({ id }) => id === messageId);
+      if (!message) throw new Error('Message not found.');
+      return message;
+    },
+  };
+}
+
+export async function loadSyncedWorkspace<T>(credential: string): Promise<T | null> {
+  const result = await syncRequest<{ workspace: T | null }>(
+    '/api/sync/workspace/load',
+    credential,
+  );
+  return result.workspace;
+}
+
+export async function saveSyncedWorkspace(
+  credential: string,
+  workspace: { dms: Conversation[]; groups: unknown[] },
+): Promise<void> {
+  await syncRequest('/api/sync/workspace', credential, { workspace }, 'PUT');
 }

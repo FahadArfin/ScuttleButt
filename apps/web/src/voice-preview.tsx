@@ -275,6 +275,10 @@ export function VoicePreviewPanel({
     }
   };
 
+  useEffect(() => {
+    attachVideo(sharing ? shareStream.current : cameraEnabled ? cameraStream.current : undefined);
+  }, [cameraEnabled, sharing]);
+
   const playSound = (frequency: number) => {
     const context = new AudioContext();
     const oscillator = context.createOscillator();

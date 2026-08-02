@@ -25,6 +25,11 @@ export interface UserProfileUpdate {
   tags: string[];
 }
 
+export interface SyncedWorkspace {
+  dms: unknown[];
+  groups: unknown[];
+}
+
 export class ScuttlebuttDatabase {
   readonly pool: Pool;
 
@@ -118,6 +123,33 @@ export class ScuttlebuttDatabase {
       );
       CREATE INDEX IF NOT EXISTS messages_channel_created_idx ON messages(channel_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS friendships_recipient_status_idx ON friendships(recipient_id, status);
+      CREATE TABLE IF NOT EXISTS user_workspace_state (
+        user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        groups jsonb NOT NULL DEFAULT '[]',
+        dms jsonb NOT NULL DEFAULT '[]',
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS synced_conversations (
+        id text PRIMARY KEY,
+        conversation jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS synced_conversation_members (
+        conversation_id text NOT NULL REFERENCES synced_conversations(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        joined_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (conversation_id, user_id)
+      );
+      CREATE TABLE IF NOT EXISTS synced_messages (
+        id text PRIMARY KEY,
+        conversation_id text NOT NULL REFERENCES synced_conversations(id) ON DELETE CASCADE,
+        sender_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message jsonb NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS synced_messages_conversation_created_idx
+        ON synced_messages(conversation_id, created_at);
     `);
   }
 
@@ -184,6 +216,129 @@ export class ScuttlebuttDatabase {
     const user = result.rows[0];
     if (!user) throw new Error('User profile could not be updated.');
     return user;
+  }
+
+  async getUserId(googleSubject: string): Promise<string> {
+    const result = await this.pool.query<{ id: string }>(
+      'SELECT id FROM users WHERE google_subject = $1',
+      [googleSubject],
+    );
+    const id = result.rows[0]?.id;
+    if (!id) throw new Error('Authenticated user was not found.');
+    return id;
+  }
+
+  async getWorkspace(userId: string): Promise<SyncedWorkspace | null> {
+    const result = await this.pool.query<{ dms: unknown[]; groups: unknown[] }>(
+      'SELECT groups, dms FROM user_workspace_state WHERE user_id = $1',
+      [userId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async saveWorkspace(userId: string, workspace: SyncedWorkspace): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO user_workspace_state (user_id, groups, dms)
+       VALUES ($1, $2::jsonb, $3::jsonb)
+       ON CONFLICT (user_id) DO UPDATE SET
+         groups = EXCLUDED.groups, dms = EXCLUDED.dms, updated_at = now()`,
+      [userId, JSON.stringify(workspace.groups), JSON.stringify(workspace.dms)],
+    );
+  }
+
+  async upsertConversation(userId: string, conversation: { id: string }): Promise<unknown> {
+    await this.pool.query(
+      `INSERT INTO synced_conversations (id, conversation) VALUES ($1, $2::jsonb)
+       ON CONFLICT (id) DO UPDATE SET conversation = EXCLUDED.conversation, updated_at = now()`,
+      [conversation.id, JSON.stringify(conversation)],
+    );
+    await this.pool.query(
+      `INSERT INTO synced_conversation_members (conversation_id, user_id) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [conversation.id, userId],
+    );
+    return conversation;
+  }
+
+  async listConversations(userId: string): Promise<unknown[]> {
+    const result = await this.pool.query<{ conversation: unknown }>(
+      `SELECT c.conversation FROM synced_conversations c
+       JOIN synced_conversation_members m ON m.conversation_id = c.id
+       WHERE m.user_id = $1 ORDER BY c.updated_at DESC`,
+      [userId],
+    );
+    return result.rows.map(({ conversation }) => conversation);
+  }
+
+  async listMessages(userId: string, conversationId: string): Promise<unknown[]> {
+    const result = await this.pool.query<{ avatar_url: string | null; message: Record<string, unknown> }>(
+      `SELECT sm.message, sender.avatar_url FROM synced_messages sm
+       JOIN synced_conversation_members m ON m.conversation_id = sm.conversation_id
+       JOIN users sender ON sender.id = sm.sender_id
+       WHERE sm.conversation_id = $1 AND m.user_id = $2
+       ORDER BY sm.created_at`,
+      [conversationId, userId],
+    );
+    return result.rows.map(({ avatar_url, message }) => ({
+      ...message,
+      senderAvatar: avatar_url ?? undefined,
+    }));
+  }
+
+  async saveMessage(
+    userId: string,
+    conversationId: string,
+    message: { id: string },
+  ): Promise<unknown> {
+    const membership = await this.pool.query(
+      `SELECT 1 FROM synced_conversation_members WHERE conversation_id = $1 AND user_id = $2`,
+      [conversationId, userId],
+    );
+    if (membership.rowCount === 0) throw new Error('Conversation access denied.');
+    await this.pool.query(
+      `INSERT INTO synced_messages (id, conversation_id, sender_id, message)
+       VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (id) DO UPDATE SET message = EXCLUDED.message, updated_at = now()`,
+      [message.id, conversationId, userId, JSON.stringify(message)],
+    );
+    return message;
+  }
+
+  async updateMessage(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+    operation: 'delete' | 'edit' | 'react',
+    value?: string,
+  ): Promise<void> {
+    const result = await this.pool.query<{ message: Record<string, unknown>; sender_id: string }>(
+      `SELECT sm.message, sm.sender_id FROM synced_messages sm
+       JOIN synced_conversation_members scm ON scm.conversation_id = sm.conversation_id
+       WHERE sm.id = $1 AND sm.conversation_id = $2 AND scm.user_id = $3`,
+      [messageId, conversationId, userId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error('Message not found.');
+    if ((operation === 'edit' || operation === 'delete') && row.sender_id !== userId) {
+      throw new Error('Only your messages can be changed.');
+    }
+    if (operation === 'delete') {
+      await this.pool.query('DELETE FROM synced_messages WHERE id = $1', [messageId]);
+      return;
+    }
+    const next = { ...row.message };
+    if (operation === 'edit') {
+      next.body = value ?? '';
+      next.edited = true;
+    } else {
+      const reactions = { ...((next.reactions as Record<string, number> | undefined) ?? {}) };
+      if (value) reactions[value] = (reactions[value] ?? 0) + 1;
+      next.reactions = reactions;
+    }
+    await this.pool.query(
+      'UPDATE synced_messages SET message = $2::jsonb, updated_at = now() WHERE id = $1',
+      [messageId, JSON.stringify(next)],
+    );
   }
 
   async close(): Promise<void> {

@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createDemoMessagingRepository } from './messaging.js';
+import { createDemoMessagingRepository, createSyncedMessagingRepository } from './messaging.js';
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('local messaging repository', () => {
   it('creates a conversation that can immediately receive messages', async () => {
@@ -74,5 +76,42 @@ describe('local messaging repository', () => {
     expect(
       (await repository.getConversations()).find(({ id }) => id === 'lounge')?.unreadCount,
     ).toBe(0);
+  });
+
+  it('loads cloud messages and identifies the signed-in user', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        messages: [
+          {
+            id: 'message-1',
+            senderId: 'user-2',
+            senderName: 'Friend',
+            senderInitials: 'FR',
+            senderAvatar: 'https://example.com/friend.png',
+            body: 'Synced message',
+            sentAt: 'Now',
+            status: 'sent',
+            edited: false,
+            own: true,
+            attachments: [],
+            reactions: {},
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const repository = createSyncedMessagingRepository('credential', {
+      id: 'user-1',
+      name: 'Current User',
+    });
+
+    const messages = await repository.getMessages('shared-general');
+
+    expect(messages[0]).toMatchObject({ body: 'Synced message', own: false });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/sync/messages/list',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });

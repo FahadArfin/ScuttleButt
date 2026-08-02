@@ -33,10 +33,47 @@ interface ProfileBody extends GoogleCredentialBody {
   };
 }
 
+interface WorkspaceBody extends GoogleCredentialBody {
+  workspace: { dms: unknown[]; groups: unknown[] };
+}
+
+interface ConversationBody extends GoogleCredentialBody {
+  conversation: { id: string };
+}
+
+interface ConversationRequestBody extends GoogleCredentialBody {
+  conversationId: string;
+}
+
+interface MessageBody extends ConversationRequestBody {
+  message: { id: string; senderId?: string };
+}
+
+interface MessageMutationBody extends ConversationRequestBody {
+  messageId: string;
+  value?: string;
+}
+
 export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: true });
   const google = options.googleClientId ? new OAuth2Client(options.googleClientId) : undefined;
   const database = options.databaseUrl ? new ScuttlebuttDatabase(options.databaseUrl) : undefined;
+  const authenticate = async (credential: string): Promise<string> => {
+    if (!google || !options.googleClientId || !database) {
+      throw Object.assign(new Error('Cloud synchronization is not configured.'), {
+        statusCode: 503,
+      });
+    }
+    const ticket = await google.verifyIdToken({
+      idToken: credential,
+      audience: options.googleClientId,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+      throw Object.assign(new Error('Google identity could not be verified.'), { statusCode: 401 });
+    }
+    return database.getUserId(payload.sub);
+  };
 
   void app.register(cors, {
     credentials: true,
@@ -133,6 +170,77 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
           onboardingCompleted: true,
         };
     return { user };
+  });
+
+  app.post<{ Body: GoogleCredentialBody }>('/api/sync/workspace/load', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    return { workspace: await database!.getWorkspace(userId) };
+  });
+
+  app.put<{ Body: WorkspaceBody }>('/api/sync/workspace', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    await database!.saveWorkspace(userId, request.body.workspace);
+    return { saved: true };
+  });
+
+  app.post<{ Body: ConversationBody }>('/api/sync/conversations', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    return { conversation: await database!.upsertConversation(userId, request.body.conversation) };
+  });
+
+  app.post<{ Body: GoogleCredentialBody }>('/api/sync/conversations/list', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    return { conversations: await database!.listConversations(userId) };
+  });
+
+  app.post<{ Body: ConversationRequestBody }>('/api/sync/messages/list', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    return {
+      messages: await database!.listMessages(userId, request.body.conversationId),
+    };
+  });
+
+  app.post<{ Body: MessageBody }>('/api/sync/messages', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    const message = { ...request.body.message, senderId: userId };
+    return {
+      message: await database!.saveMessage(userId, request.body.conversationId, message),
+    };
+  });
+
+  app.patch<{ Body: MessageMutationBody }>('/api/sync/messages/edit', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    await database!.updateMessage(
+      userId,
+      request.body.conversationId,
+      request.body.messageId,
+      'edit',
+      request.body.value,
+    );
+    return { saved: true };
+  });
+
+  app.post<{ Body: MessageMutationBody }>('/api/sync/messages/react', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    await database!.updateMessage(
+      userId,
+      request.body.conversationId,
+      request.body.messageId,
+      'react',
+      request.body.value,
+    );
+    return { saved: true };
+  });
+
+  app.delete<{ Body: MessageMutationBody }>('/api/sync/messages', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    await database!.updateMessage(
+      userId,
+      request.body.conversationId,
+      request.body.messageId,
+      'delete',
+    );
+    return { deleted: true };
   });
 
   if (database) {

@@ -51,6 +51,9 @@ import { MessageRow, PersonAvatar } from './App.js';
 import type { SignedInUser } from './auth.js';
 import {
   createDemoMessagingRepository,
+  createSyncedMessagingRepository,
+  loadSyncedWorkspace,
+  saveSyncedWorkspace,
   type AttachmentDraft,
   type Conversation,
   type Message,
@@ -165,8 +168,13 @@ function groupIcon(icon: WorkspaceGroup['icon']): ReactNode {
 }
 
 export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
+  const googleCredential = sessionStorage.getItem('scuttlebutt:google-credential');
   const [repository] = useState<MessagingRepository>(
-    () => repositoryProp ?? createDemoMessagingRepository({ id: user.id, name: user.name }),
+    () =>
+      repositoryProp ??
+      (googleCredential
+        ? createSyncedMessagingRepository(googleCredential, { id: user.id, name: user.name })
+        : createDemoMessagingRepository({ id: user.id, name: user.name })),
   );
   const [groups, setGroups] = useState<WorkspaceGroup[]>(loadStoredGroups);
   const [customDms, setCustomDms] = useState<Conversation[]>(loadStoredDms);
@@ -196,6 +204,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [profile, setProfile] = useState(() => loadProfile(user));
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(!googleCredential);
   const members = useMemo<WorkspaceMember[]>(
     () => [
       {
@@ -233,6 +242,29 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   }, [messages, search]);
 
   useEffect(() => {
+    if (!googleCredential) return;
+    let mounted = true;
+    void loadSyncedWorkspace<{ dms: Conversation[]; groups: WorkspaceGroup[] }>(googleCredential)
+      .then((workspace) => {
+        if (!mounted) return;
+        if (workspace) {
+          setGroups(workspace.groups);
+          setCustomDms(workspace.dms);
+        }
+        setWorkspaceReady(true);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setNotice({ tone: 'error', text: 'Cloud workspace could not be loaded.' });
+        setWorkspaceReady(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [googleCredential]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
     let mounted = true;
     const prepareWorkspace = async () => {
       await Promise.all([
@@ -255,15 +287,29 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     return () => {
       mounted = false;
     };
-  }, [repository]);
+  }, [repository, workspaceReady]);
 
   useEffect(() => {
+    if (!workspaceReady) return;
     window.localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groups));
-  }, [groups]);
-
-  useEffect(() => {
     window.localStorage.setItem(DM_STORAGE_KEY, JSON.stringify(customDms));
-  }, [customDms]);
+    if (googleCredential) {
+      const persistedGroups = groups.map((group) => ({
+        ...group,
+        channels: group.channels.map((channel) => ({ ...channel, participantIds: [] })),
+      }));
+      const timeout = window.setTimeout(() => {
+        void saveSyncedWorkspace(googleCredential, {
+          groups: persistedGroups,
+          dms: customDms,
+        }).catch(() =>
+          setNotice({ tone: 'error', text: 'Workspace changes could not be synchronized.' }),
+        );
+      }, 250);
+      return () => window.clearTimeout(timeout);
+    }
+    return undefined;
+  }, [customDms, googleCredential, groups, workspaceReady]);
 
   useEffect(() => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
@@ -289,6 +335,15 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       mounted = false;
     };
   }, [repository, selectedConversationId]);
+
+  useEffect(() => {
+    if (!googleCredential || !selectedConversationId) return;
+    const interval = window.setInterval(() => {
+      void repository.getMessages(selectedConversationId).then(setMessages);
+      void repository.getConversations().then(setConversations);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [googleCredential, repository, selectedConversationId]);
 
   useEffect(() => {
     if (!selectedConversationId) return;

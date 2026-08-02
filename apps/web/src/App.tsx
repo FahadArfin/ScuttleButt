@@ -193,7 +193,7 @@ export function MessageRow({
       data-message-id={message.id}
     >
       <PersonAvatar
-        image={message.own && avatar ? avatar : avatarForMessage(message)}
+        image={message.own && avatar ? avatar : message.senderAvatar ?? avatarForMessage(message)}
         name={message.senderName}
         status="online"
       />
