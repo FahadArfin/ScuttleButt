@@ -40,4 +40,20 @@ test('opens the voice proof-of-concept controls for a voice channel', async ({ p
   await expect(page.getByText('connected', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Mute' }).click();
   await expect(page.getByRole('button', { name: 'Unmute' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Meeting chat' })).toBeVisible();
+  await expect(page.getByLabel('Engineering Room participants')).toContainText('Alex Rivers');
+});
+
+test('separates DMs from groups and creates local channels', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Add a text channel' }).click();
+  await page.getByLabel('Name').fill('release-planning');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'release-planning' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Direct messages' }).click();
+  await expect(page.getByText('Direct Messages', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start a direct message' })).toBeVisible();
+  await expect(page.getByText('Text channels', { exact: true })).not.toBeVisible();
 });

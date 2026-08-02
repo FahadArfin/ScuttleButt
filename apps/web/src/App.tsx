@@ -149,7 +149,7 @@ function IconButton({
   );
 }
 
-function PersonAvatar({
+export function PersonAvatar({
   image,
   name,
   status,
@@ -169,7 +169,7 @@ function PersonAvatar({
   );
 }
 
-function MessageRow({
+export function MessageRow({
   message,
   onDelete,
   onEdit,

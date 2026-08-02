@@ -3,6 +3,28 @@ import { describe, expect, it } from 'vitest';
 import { createDemoMessagingRepository } from './messaging.js';
 
 describe('demo messaging repository', () => {
+  it('creates a conversation that can immediately receive messages', async () => {
+    const repository = createDemoMessagingRepository();
+    await repository.createConversation({
+      id: 'new-room',
+      title: 'new-room',
+      kind: 'channel',
+      avatarLabel: '#',
+      presence: 'Local text channel',
+      preview: 'Start the conversation.',
+      updatedAt: 'Now',
+      unreadCount: 0,
+      encrypted: true,
+      members: 3,
+      channelKind: 'text',
+    });
+
+    await repository.sendMessage('new-room', 'First message');
+
+    expect((await repository.getConversations()).some(({ id }) => id === 'new-room')).toBe(true);
+    expect((await repository.getMessages('new-room'))[0]?.body).toBe('First message');
+  });
+
   it('sends replies and preserves attachment metadata', async () => {
     const repository = createDemoMessagingRepository();
     const originalMessages = await repository.getMessages('jordan');

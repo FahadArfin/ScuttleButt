@@ -54,6 +54,7 @@ export interface SendMessageOptions {
 }
 
 export interface MessagingRepository {
+  createConversation(conversation: Conversation): Promise<Conversation>;
   getConversations(): Promise<Conversation[]>;
   getMessages(conversationId: string): Promise<Message[]>;
   sendMessage(conversationId: string, body: string, options?: SendMessageOptions): Promise<Message>;
@@ -260,6 +261,21 @@ const initialMessages: Record<string, Message[]> = {
       reactions: { '✅': 2 },
     },
   ],
+  huddle: [
+    {
+      id: 'huddle-1',
+      senderId: 'maya',
+      senderName: 'Maya Patel',
+      senderInitials: 'MP',
+      body: 'I added the meeting notes here so everyone can follow along without joining audio.',
+      sentAt: '10:12 AM',
+      status: 'sent',
+      edited: false,
+      own: false,
+      attachments: [],
+      reactions: { '👍': 2 },
+    },
+  ],
 };
 
 function cloneMessage(message: Message): Message {
@@ -281,6 +297,15 @@ export function createDemoMessagingRepository(): MessagingRepository {
   ) as Record<string, Message[]>;
 
   return {
+    async createConversation(conversation) {
+      const existing = conversations.find(({ id }) => id === conversation.id);
+      if (existing) return { ...existing };
+      const nextConversation = { ...conversation };
+      conversations.push(nextConversation);
+      messages[nextConversation.id] = [];
+      return { ...nextConversation };
+    },
+
     async getConversations() {
       return conversations.map((conversation) => ({ ...conversation }));
     },

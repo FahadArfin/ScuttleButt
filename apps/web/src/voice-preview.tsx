@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { LockSimple, ShieldCheck } from '@phosphor-icons/react';
 import type { VoiceParticipantSnapshot, VoiceSessionSnapshot } from '@scuttlebutt/livekit-client';
 import { E2E_SELECTORS } from '@scuttlebutt/testing';
 
@@ -7,28 +8,11 @@ import { VideoPreviewPanel } from './video-preview.js';
 
 const LOCAL_PARTICIPANT: VoiceParticipantSnapshot = {
   connectionQuality: 'excellent',
-  identity: 'fahad',
+  identity: 'alex',
   isSpeaking: false,
   microphoneEnabled: true,
-  name: 'Fahad Arfin',
+  name: 'Alex Rivers',
 };
-
-const DEMO_PARTICIPANTS: VoiceParticipantSnapshot[] = [
-  {
-    connectionQuality: 'excellent',
-    identity: 'jordan',
-    isSpeaking: true,
-    microphoneEnabled: true,
-    name: 'Jordan Lee',
-  },
-  {
-    connectionQuality: 'good',
-    identity: 'maya',
-    isSpeaking: false,
-    microphoneEnabled: true,
-    name: 'Maya Chen',
-  },
-];
 
 const INITIAL_PREVIEW: VoiceSessionSnapshot = {
   state: 'disconnected',
@@ -44,21 +28,31 @@ const INITIAL_PREVIEW: VoiceSessionSnapshot = {
   error: null,
 };
 
-export function VoicePreviewPanel({ roomName }: { roomName: string }) {
+export function VoicePreviewPanel({
+  onConnectionChange,
+  participants = [],
+  roomName,
+}: {
+  onConnectionChange?: (connected: boolean) => void;
+  participants?: Array<{ identity: string; name: string }>;
+  roomName: string;
+}) {
   const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(INITIAL_PREVIEW);
   const isConnected = snapshot.state === 'connected' || snapshot.state === 'reconnecting';
 
   const joinPreview = () => {
     setSnapshot({
       ...INITIAL_PREVIEW,
-      participants: DEMO_PARTICIPANTS,
+      participants: [],
       roomName,
       state: 'connected',
     });
+    onConnectionChange?.(true);
   };
 
   const leavePreview = () => {
     setSnapshot(INITIAL_PREVIEW);
+    onConnectionChange?.(false);
   };
 
   return (
@@ -70,8 +64,8 @@ export function VoicePreviewPanel({ roomName }: { roomName: string }) {
       <div className="voice-poc-header">
         <div>
           <p className="section-kicker">Voice proof of concept</p>
-          <h2>Huddle</h2>
-          <p>Three-person local room preview · {roomName}</p>
+          <h2>{roomName}</h2>
+          <p>{participants.length} connected · encrypted meeting room</p>
         </div>
         <span className={`voice-state-pill voice-state-${snapshot.state}`}>
           <span aria-hidden="true" />
@@ -79,13 +73,18 @@ export function VoicePreviewPanel({ roomName }: { roomName: string }) {
         </span>
       </div>
       <div className="voice-poc-boundary" role="status">
-        <span aria-hidden="true">▣</span>
+        <ShieldCheck size={18} weight="duotone" aria-hidden="true" />
         Preview only. The LiveKit client boundary is ready; real media requires server-issued
         short-lived credentials.
       </div>
       <div className="voice-participant-grid">
-        {[snapshot.localParticipant, ...snapshot.participants]
-          .filter((participant): participant is VoiceParticipantSnapshot => participant !== null)
+        {participants
+          .map<VoiceParticipantSnapshot>((participant, index) => ({
+            ...participant,
+            connectionQuality: index === 0 ? 'excellent' : 'good',
+            isSpeaking: index === 0,
+            microphoneEnabled: true,
+          }))
           .map((participant) => (
             <div
               className={`voice-participant ${participant.isSpeaking ? 'voice-participant-speaking' : ''}`}
@@ -111,7 +110,7 @@ export function VoicePreviewPanel({ roomName }: { roomName: string }) {
               />
             </div>
           ))}
-        {snapshot.participants.length === 0 ? (
+        {participants.length === 0 ? (
           <p className="voice-empty-state">No one is in the room yet.</p>
         ) : null}
       </div>
@@ -163,10 +162,7 @@ export function VoicePreviewPanel({ roomName }: { roomName: string }) {
           <span className="quality-dot quality-excellent" /> Quality excellent
         </span>
         <span>
-          <span className="voice-lock" aria-hidden="true">
-            ⌑
-          </span>{' '}
-          Media E2EE configured
+          <LockSimple className="voice-lock" size={15} aria-hidden="true" /> Media E2EE configured
         </span>
         <span>
           {snapshot.reconnectAttempts > 0
