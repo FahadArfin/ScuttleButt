@@ -4,9 +4,9 @@ test('renders the Scuttlebutt messaging workspace', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByText('Scuttlebutt', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '# Lounge' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'engineering' })).toBeVisible();
   await expect(page.getByTestId('message-timeline')).toContainText(
-    'Welcome to the Scuttlebutt lounge.',
+    'search indexing is ready for review',
   );
   await expect(page.getByTestId('message-composer')).toBeVisible();
 });
@@ -21,14 +21,14 @@ test('sends a message and supports a reply context', async ({ page }) => {
     'A small message from the browser test.',
   );
 
-  await page.getByRole('button', { name: 'Reply to Jordan Lee' }).first().click();
-  await expect(page.getByText('Replying to Jordan Lee')).toBeVisible();
+  await page.getByRole('button', { name: 'Reply to Maya Patel' }).first().click();
+  await expect(page.getByText('Replying to Maya Patel')).toBeVisible();
 });
 
 test('opens the voice proof-of-concept controls for a voice channel', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByRole('button', { name: /huddle/ }).click();
+  await page.getByRole('button', { name: /Engineering Room/ }).click();
   await expect(page.getByTestId('voice-poc-panel')).toBeVisible();
   await expect(page.getByTestId('video-poc-panel')).toBeVisible();
   await expect(page.getByTestId('video-diagnostics')).toContainText('Resolution');

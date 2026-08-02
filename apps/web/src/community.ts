@@ -80,7 +80,7 @@ const roles: CommunityRole[] = [
 
 export const DEMO_COMMUNITY: Community = {
   id: 'northstar-lab',
-  name: 'Northstar Lab',
+  name: 'Scuttlebutt Labs',
   description: 'A private product community for building Scuttlebutt in the open.',
   homeserverUrl: 'http://localhost:8008',
   spaceRoomId: '!northstar:localhost',
@@ -91,19 +91,19 @@ export const DEMO_COMMUNITY: Community = {
   members: [
     {
       userId: '@fahad:localhost',
-      displayName: 'Fahad Arfin',
+      displayName: 'Alex Rivers',
       roleIds: ['owner'],
       joinedAt: '2026-08-02T00:00:00.000Z',
     },
     {
       userId: '@jordan:localhost',
-      displayName: 'Jordan Lee',
+      displayName: 'Maya Patel',
       roleIds: ['member'],
       joinedAt: '2026-08-02T00:00:00.000Z',
     },
     {
       userId: '@maya:localhost',
-      displayName: 'Maya Chen',
+      displayName: 'Priya Shah',
       roleIds: ['member'],
       joinedAt: '2026-08-02T00:00:00.000Z',
     },

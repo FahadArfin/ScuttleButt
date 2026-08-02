@@ -5,12 +5,45 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 
+import {
+  ArrowClockwise,
+  Bell,
+  CaretDown,
+  ChatCenteredDots,
+  Code,
+  Compass,
+  Desktop,
+  FileText,
+  GearSix,
+  Hash,
+  Headphones,
+  House,
+  Leaf,
+  LockSimple,
+  MagnifyingGlass,
+  Microphone,
+  Mountains,
+  Paperclip,
+  PaperPlaneRight,
+  PencilSimple,
+  Planet,
+  Plus,
+  PushPin,
+  Smiley,
+  SpeakerHigh,
+  Star,
+  Trash,
+  Users,
+  Waveform,
+  X,
+} from '@phosphor-icons/react';
 import { APP_NAME } from '@scuttlebutt/shared-types';
 import { E2E_SELECTORS } from '@scuttlebutt/testing';
-import { createDesktopBridge, type DesktopDiagnostics } from '@scuttlebutt/desktop-bridge';
 
+import { DEMO_COMMUNITY } from './community.js';
 import {
   createDemoMessagingRepository,
   type AttachmentDraft,
@@ -19,7 +52,6 @@ import {
   type MessagingRepository,
   type ReplyReference,
 } from './messaging.js';
-import { DEMO_COMMUNITY, channelsForCategory } from './community.js';
 import { VoicePreviewPanel } from './voice-preview.js';
 
 interface AppProps {
@@ -31,34 +63,110 @@ interface Notice {
   text: string;
 }
 
+interface Member {
+  avatar: string;
+  name: string;
+  note: string;
+  status: 'away' | 'offline' | 'online';
+}
+
 const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
 const QUICK_REACTIONS = ['❤️', '👍', '✨'];
-const CHANNEL_CONVERSATION_IDS: Record<string, string> = {
-  'channel-design': 'design',
-  'channel-huddle': 'huddle',
-  'channel-lounge': 'lounge',
-  'channel-welcome': 'welcome',
-};
-const desktopBridge = createDesktopBridge();
 
-function channelIcon(kind: string): string {
-  if (kind === 'voice') {
-    return '◉';
+const AVATARS = {
+  alex: '/avatars/alex-rivers.webp',
+  fahad: '/avatars/alex-rivers.webp',
+  jordan: '/avatars/jordan-park.webp',
+  maya: '/avatars/maya-patel.webp',
+  priya: '/avatars/priya-shah.webp',
+  sam: '/avatars/sam-lee.webp',
+  taylor: '/avatars/taylor-nguyen.webp',
+};
+
+type AvatarKey = keyof typeof AVATARS;
+
+const TEXT_CHANNELS = [
+  { conversationId: 'welcome', name: 'announcements' },
+  { conversationId: 'lounge', name: 'general' },
+  { conversationId: 'lounge', name: 'engineering' },
+  { conversationId: 'design', name: 'product-design' },
+  { conversationId: 'design', name: 'random' },
+];
+
+const MEMBERS: Member[] = [
+  { avatar: AVATARS.alex, name: 'Alex Rivers', note: 'Owner', status: 'online' },
+  { avatar: AVATARS.maya, name: 'Maya Patel', note: 'Online', status: 'online' },
+  { avatar: AVATARS.sam, name: 'Sam Lee', note: 'Online', status: 'online' },
+  { avatar: AVATARS.priya, name: 'Priya Shah', note: 'Online', status: 'online' },
+  { avatar: AVATARS.jordan, name: 'Jordan Park', note: 'Online', status: 'online' },
+  { avatar: AVATARS.taylor, name: 'Taylor Nguyen', note: 'Away', status: 'away' },
+  { avatar: AVATARS.jordan, name: 'Chris Diaz', note: 'Away', status: 'away' },
+  { avatar: AVATARS.sam, name: 'Riley Chen', note: 'Offline', status: 'offline' },
+];
+
+function avatarForMessage(message: Message): string {
+  const senderKey = message.senderId.toLowerCase();
+  if (senderKey in AVATARS) {
+    return AVATARS[senderKey as AvatarKey];
   }
-  if (kind === 'forum') {
-    return '✧';
-  }
-  return '#';
+  const name = message.senderName.toLowerCase();
+  if (name.includes('maya')) return AVATARS.maya;
+  if (name.includes('jordan')) return AVATARS.jordan;
+  if (name.includes('sam')) return AVATARS.sam;
+  if (name.includes('priya')) return AVATARS.priya;
+  if (name.includes('alex') || message.own) return AVATARS.alex;
+  return '/scuttlebutt-mark.webp';
 }
 
 function formatFileSize(size: number): string {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-  if (size < 1024 * 1024) {
-    return `${Math.round(size / 1024)} KB`;
-  }
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function IconButton({
+  children,
+  label,
+  onClick,
+  pressed,
+}: {
+  children: ReactNode;
+  label: string;
+  onClick?: () => void;
+  pressed?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="icon-button"
+      aria-label={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+      title={label}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PersonAvatar({
+  image,
+  name,
+  status,
+  size = 'medium',
+}: {
+  image: string;
+  name: string;
+  status?: Member['status'];
+  size?: 'large' | 'medium' | 'small';
+}) {
+  return (
+    <span className={`person-avatar person-avatar-${size}`}>
+      <img src={image} alt="" />
+      {status ? <span className={`presence-dot presence-${status}`} aria-label={status} /> : null}
+      <span className="visually-hidden">{name}</span>
+    </span>
+  );
 }
 
 function MessageRow({
@@ -82,9 +190,7 @@ function MessageRow({
       data-testid={E2E_SELECTORS.message}
       data-message-id={message.id}
     >
-      <div className="message-avatar" aria-hidden="true">
-        {message.senderInitials}
-      </div>
+      <PersonAvatar image={avatarForMessage(message)} name={message.senderName} status="online" />
       <div className="message-content">
         <div className="message-heading">
           <strong>{message.senderName}</strong>
@@ -93,34 +199,37 @@ function MessageRow({
         </div>
         {message.replyTo ? (
           <div className="reply-snippet" aria-label={`Replying to ${message.replyTo.author}`}>
-            <span>{message.replyTo.author}</span>
-            <p>{message.replyTo.body}</p>
+            <strong>{message.replyTo.author}</strong>
+            <span>{message.replyTo.body}</span>
           </div>
         ) : null}
-        <div className="message-bubble">
-          <p>{message.body || ' '}</p>
-          {message.attachments.length > 0 ? (
-            <div className="message-attachments" aria-label="Message attachments">
-              {message.attachments.map((attachment) => (
-                <div className="message-attachment" key={attachment.id}>
-                  <span className="attachment-icon" aria-hidden="true">
-                    ↗
-                  </span>
-                  <span>
-                    <strong>{attachment.name}</strong>
-                    <small>{formatFileSize(attachment.size)}</small>
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <p className="message-body">{message.body || ' '}</p>
+        {message.attachments.length > 0 ? (
+          <div className="message-attachments" aria-label="Message attachments">
+            {message.attachments.map((attachment) => (
+              <div className="message-attachment" key={attachment.id}>
+                <span className="attachment-icon" aria-hidden="true">
+                  {attachment.mimeType.includes('code') || attachment.name.endsWith('.md') ? (
+                    <Code size={20} weight="duotone" />
+                  ) : (
+                    <FileText size={20} weight="duotone" />
+                  )}
+                </span>
+                <span>
+                  <strong>{attachment.name}</strong>
+                  <small>{formatFileSize(attachment.size)}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="message-actions">
           <button
             type="button"
             onClick={() => onReply(message)}
             aria-label={`Reply to ${message.senderName}`}
           >
+            <ChatCenteredDots size={15} />
             Reply
           </button>
           {QUICK_REACTIONS.map((emoji) => (
@@ -137,10 +246,10 @@ function MessageRow({
           {message.own ? (
             <>
               <button type="button" onClick={() => onEdit(message)} aria-label="Edit message">
-                Edit
+                <PencilSimple size={15} />
               </button>
               <button type="button" onClick={() => onDelete(message)} aria-label="Delete message">
-                Delete
+                <Trash size={15} />
               </button>
             </>
           ) : null}
@@ -157,17 +266,18 @@ function MessageRow({
                 {emoji} <span>{count}</span>
               </button>
             ))}
+            <button type="button" className="reaction-add" aria-label="Add reaction">
+              <Smiley size={14} />
+            </button>
           </div>
         ) : null}
         {message.status === 'failed' ? (
           <div className="message-failure" role="alert">
             <span>Not sent</span>
             <button type="button" onClick={() => onRetry(message)}>
-              Retry
+              <ArrowClockwise size={14} /> Retry
             </button>
           </div>
-        ) : message.own ? (
-          <span className="message-delivery">Delivered</span>
         ) : null}
       </div>
     </article>
@@ -187,16 +297,17 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
   const [editingMessage, setEditingMessage] = useState<Message>();
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [notice, setNotice] = useState<Notice>();
-  const [desktopDiagnostics, setDesktopDiagnostics] = useState<DesktopDiagnostics>();
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [membersVisible, setMembersVisible] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [activeChannelAlias, setActiveChannelAlias] = useState('engineering');
 
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
+  const directMessages = conversations.filter(({ kind }) => kind === 'direct');
   const filteredMessages = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) {
-      return messages;
-    }
+    if (!query) return messages;
     return messages.filter((message) =>
       `${message.senderName} ${message.body}`.toLowerCase().includes(query),
     );
@@ -204,25 +315,8 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
 
   useEffect(() => {
     let mounted = true;
-    void desktopBridge
-      .getDiagnostics()
-      .then((diagnostics) => {
-        if (mounted) {
-          setDesktopDiagnostics(diagnostics);
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     void repository.getConversations().then((nextConversations) => {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setConversations(nextConversations);
       setSelectedConversationId(
         nextConversations.find(({ id }) => id === 'lounge')?.id ?? nextConversations[0]?.id ?? '',
@@ -235,18 +329,14 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
   }, [repository]);
 
   useEffect(() => {
-    if (!selectedConversationId) {
-      return;
-    }
+    if (!selectedConversationId) return;
     let mounted = true;
     setIsLoading(true);
     void Promise.all([
       repository.getMessages(selectedConversationId),
       repository.markRead(selectedConversationId),
     ]).then(([nextMessages]) => {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setMessages(nextMessages);
       setIsLoading(false);
       void repository.getConversations().then(setConversations);
@@ -257,9 +347,7 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
   }, [repository, selectedConversationId]);
 
   useEffect(() => {
-    if (!selectedConversationId || typeof window === 'undefined') {
-      return;
-    }
+    if (!selectedConversationId || typeof window === 'undefined') return;
     setComposer(
       window.localStorage.getItem(`${DRAFT_STORAGE_PREFIX}${selectedConversationId}`) ?? '',
     );
@@ -269,43 +357,32 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
   }, [selectedConversationId]);
 
   useEffect(() => {
-    if (!selectedConversationId || typeof window === 'undefined') {
-      return;
-    }
+    if (!selectedConversationId || typeof window === 'undefined') return;
     const storageKey = `${DRAFT_STORAGE_PREFIX}${selectedConversationId}`;
-    if (composer) {
-      window.localStorage.setItem(storageKey, composer);
-    } else {
-      window.localStorage.removeItem(storageKey);
-    }
+    if (composer) window.localStorage.setItem(storageKey, composer);
+    else window.localStorage.removeItem(storageKey);
   }, [composer, selectedConversationId]);
 
   useEffect(() => {
-    if (!selectedConversationId) {
-      return;
-    }
+    if (!selectedConversationId) return;
     void repository.setTyping(selectedConversationId, composer.trim().length > 0);
   }, [composer, repository, selectedConversationId]);
 
-  const selectConversation = (conversationId: string) => {
+  const selectConversation = (conversationId: string, channelAlias?: string) => {
     setSelectedConversationId(conversationId);
+    if (channelAlias) setActiveChannelAlias(channelAlias);
     setSearch('');
     setNotice(undefined);
   };
 
   const refreshMessages = async () => {
-    if (!selectedConversationId) {
-      return;
-    }
-    setMessages(await repository.getMessages(selectedConversationId));
+    if (selectedConversationId) setMessages(await repository.getMessages(selectedConversationId));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedConversationId || (!composer.trim() && attachments.length === 0) || isSending) {
+    if (!selectedConversationId || (!composer.trim() && attachments.length === 0) || isSending)
       return;
-    }
-
     setIsSending(true);
     try {
       if (editingMessage) {
@@ -355,424 +432,563 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
   };
 
   const handleDelete = async (message: Message) => {
-    if (!selectedConversationId) {
-      return;
-    }
+    if (!selectedConversationId) return;
     await repository.deleteMessage(selectedConversationId, message.id);
     setNotice({ tone: 'info', text: 'Message deleted.' });
     await refreshMessages();
   };
 
-  const handleEdit = (message: Message) => {
-    setEditingMessage(message);
-    setReplyTo(undefined);
-    setComposer(message.body);
-  };
-
   const handleReact = async (message: Message, emoji: string) => {
-    if (!selectedConversationId) {
-      return;
-    }
+    if (!selectedConversationId) return;
     await repository.reactToMessage(selectedConversationId, message.id, emoji);
     await refreshMessages();
   };
 
-  const handleRetry = async (message: Message) => {
-    if (!selectedConversationId) {
-      return;
-    }
-    await repository.retryMessage(selectedConversationId, message.id);
-    setNotice({ tone: 'info', text: 'Message sent.' });
-    await refreshMessages();
-  };
+  const activeChannelName =
+    selectedConversation?.kind === 'direct'
+      ? selectedConversation.title
+      : selectedConversation?.channelKind === 'voice'
+        ? selectedConversation.title
+        : activeChannelAlias;
 
   return (
     <main className="app-shell" data-testid={E2E_SELECTORS.appShell}>
-      <header className="app-topbar">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">
-            S
-          </div>
-          <div>
-            <p className="brand-name">{APP_NAME}</p>
-            <p className="brand-context">Private conversations, your infrastructure</p>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <span className="connection-pill">
-            <span className="connection-dot" aria-hidden="true" />
-            {desktopDiagnostics?.runtime === 'desktop' ? 'Desktop workspace' : 'Local workspace'}
-          </span>
-          <button type="button" className="avatar-button" aria-label="Open your profile">
-            FA
-          </button>
-        </div>
-      </header>
-
-      <div className="workspace-layout">
-        <aside className="conversation-sidebar" aria-label="Conversations">
+      <section className={`app-window ${membersVisible ? '' : 'members-collapsed'}`}>
+        <aside className="server-rail" aria-label="Communities">
           <button
             type="button"
-            className="community-card"
-            aria-label="Open Northstar Lab community details"
+            className="server-mark server-mark-brand"
+            aria-label="Scuttlebutt home"
           >
-            <span className="community-card-mark">N</span>
-            <span>
-              <strong>{DEMO_COMMUNITY.name}</strong>
-              <small>Community server</small>
-            </span>
-            <span className="community-card-menu" aria-hidden="true">
-              •••
-            </span>
+            <img src="/scuttlebutt-mark.webp" alt="" />
+            <span className="visually-hidden">{APP_NAME}</span>
           </button>
-          <div className="sidebar-heading">
-            <div>
-              <p className="section-kicker">Workspace</p>
-              <h2>Messages</h2>
-            </div>
-            <button
-              type="button"
-              className="new-conversation-button"
-              aria-label="Start a new conversation"
-              onClick={() =>
-                setNotice({
-                  tone: 'info',
-                  text: 'Friend-code invites will create new conversations here.',
-                })
-              }
-            >
-              +
-            </button>
-          </div>
-          <label className="search-field">
-            <span className="visually-hidden">Search conversations</span>
-            <span aria-hidden="true">⌕</span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search messages"
-            />
-            <kbd>⌘ K</kbd>
-          </label>
-          <nav
-            className="conversation-nav"
-            data-testid={E2E_SELECTORS.conversationList}
-            aria-label="Conversation list"
+          <div className="server-rail-divider" />
+          <button
+            type="button"
+            className="server-mark server-mark-active"
+            aria-label="Scuttlebutt Labs"
           >
-            {DEMO_COMMUNITY.categories.map((category) => (
-              <div className="channel-category" key={category.id}>
-                <div className="channel-category-heading">
-                  <span>{category.name}</span>
-                  <button type="button" aria-label={`Add a channel to ${category.name}`}>
-                    +
-                  </button>
-                </div>
-                {channelsForCategory(DEMO_COMMUNITY, category.id).map((channel) => {
-                  const conversationId = CHANNEL_CONVERSATION_IDS[channel.id];
-                  const conversation = conversations.find(({ id }) => id === conversationId);
-                  if (!conversation) {
-                    return null;
-                  }
-                  return (
-                    <button
-                      type="button"
-                      className={`channel-button ${conversation.id === selectedConversationId ? 'channel-button-active' : ''}`}
-                      key={channel.id}
-                      onClick={() => selectConversation(conversation.id)}
-                      aria-current={conversation.id === selectedConversationId ? 'page' : undefined}
-                    >
-                      <span aria-hidden="true">{channelIcon(channel.kind)}</span>
-                      <span className="channel-button-name">{channel.name}</span>
-                      {conversation.unreadCount > 0 ? (
-                        <span className="unread-badge">{conversation.unreadCount}</span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-            <div className="channel-category direct-message-category">
-              <div className="channel-category-heading">
+            <ChatCenteredDots size={24} weight="duotone" />
+          </button>
+          <button type="button" className="server-mark" aria-label="Orbit community">
+            <Planet size={24} weight="duotone" />
+          </button>
+          <button type="button" className="server-mark" aria-label="Garden community">
+            <Leaf size={24} weight="duotone" />
+          </button>
+          <button type="button" className="server-mark" aria-label="Summit community">
+            <Mountains size={24} weight="duotone" />
+          </button>
+          <button
+            type="button"
+            className="server-mark server-mark-add"
+            aria-label="Create or join a community"
+            onClick={() =>
+              setNotice({ tone: 'info', text: 'Community creation is ready for backend wiring.' })
+            }
+          >
+            <Plus size={23} />
+          </button>
+          <button
+            type="button"
+            className="server-mark server-mark-explore"
+            aria-label="Explore communities"
+          >
+            <Compass size={22} />
+          </button>
+        </aside>
+
+        <aside className="workspace-sidebar" aria-label="Workspace navigation">
+          <header className="workspace-titlebar">
+            <div>
+              <strong>Scuttlebutt Labs</strong>
+              <span>{DEMO_COMMUNITY.description}</span>
+            </div>
+            <CaretDown size={17} />
+          </header>
+
+          <div className="workspace-trust-row">
+            <span>
+              <span className="status-dot" />
+              Local server
+            </span>
+            <span>
+              <LockSimple size={14} weight="bold" />
+              Encrypted
+            </span>
+          </div>
+
+          <div className="workspace-scroll">
+            <nav className="primary-nav" aria-label="Workspace destinations">
+              <button type="button" className="primary-nav-item primary-nav-item-active">
+                <House size={19} weight="fill" /> Home
+              </button>
+              <button
+                type="button"
+                className="primary-nav-item"
+                onClick={() => setNotice({ tone: 'info', text: 'Thread inbox opened.' })}
+              >
+                <ChatCenteredDots size={19} /> Threads
+              </button>
+            </nav>
+
+            <div className="nav-section">
+              <div className="nav-section-heading">
                 <span>Direct messages</span>
                 <button type="button" aria-label="Start a direct message">
-                  +
+                  <Plus size={16} />
                 </button>
               </div>
-              {conversations
-                .filter(({ kind }) => kind === 'direct')
-                .map((conversation) => (
+              <div className="dm-list" data-testid={E2E_SELECTORS.conversationList}>
+                {directMessages.map((conversation) => (
                   <button
                     type="button"
-                    className={`conversation-button ${conversation.id === selectedConversationId ? 'conversation-button-active' : ''}`}
+                    className={`dm-button ${conversation.id === selectedConversationId ? 'dm-button-active' : ''}`}
                     key={conversation.id}
                     onClick={() => selectConversation(conversation.id)}
-                    aria-current={conversation.id === selectedConversationId ? 'page' : undefined}
                   >
-                    <span
-                      className={`conversation-avatar conversation-avatar-${conversation.kind}`}
-                    >
-                      {conversation.avatarLabel}
-                    </span>
-                    <span className="conversation-copy">
-                      <span className="conversation-title-row">
-                        <strong>{conversation.title}</strong>
-                        <time>{conversation.updatedAt}</time>
-                      </span>
-                      <span className="conversation-preview">{conversation.preview}</span>
-                    </span>
+                    <PersonAvatar
+                      image={
+                        conversation.title.toLowerCase().includes('maya')
+                          ? AVATARS.maya
+                          : AVATARS.jordan
+                      }
+                      name={conversation.title}
+                      status="online"
+                      size="small"
+                    />
+                    <span>{conversation.title}</span>
+                    {conversation.unreadCount > 0 ? (
+                      <strong>{conversation.unreadCount}</strong>
+                    ) : null}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className="dm-button"
+                  onClick={() =>
+                    setNotice({
+                      tone: 'info',
+                      text: 'Group conversations are ready for persistence.',
+                    })
+                  }
+                >
+                  <span className="group-avatar">
+                    <Users size={15} />
+                  </span>
+                  <span>Dev Team</span>
+                  <small>4 members</small>
+                </button>
+              </div>
             </div>
-          </nav>
-          <div className="sidebar-footer">
-            <span className="privacy-lock" aria-hidden="true">
-              ⌑
-            </span>
-            <span>End-to-end encryption ready</span>
+
+            <div className="community-heading">
+              <span>Scuttlebutt Labs</span>
+              <CaretDown size={14} />
+              <button type="button" aria-label="Add a community channel">
+                <Plus size={16} />
+              </button>
+            </div>
+
+            <div className="nav-section channel-section">
+              <div className="nav-section-heading">
+                <span>Text channels</span>
+                <button type="button" aria-label="Add a text channel">
+                  <Plus size={16} />
+                </button>
+              </div>
+              {TEXT_CHANNELS.map((channel) => {
+                const active =
+                  selectedConversationId === channel.conversationId &&
+                  activeChannelAlias === channel.name;
+                return (
+                  <button
+                    type="button"
+                    key={channel.name}
+                    className={`channel-button ${active ? 'channel-button-active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => {
+                      selectConversation(channel.conversationId, channel.name);
+                      if (channel.name === 'engineering' || channel.name === 'general') {
+                        setNotice(undefined);
+                      }
+                    }}
+                  >
+                    <Hash size={18} weight={active ? 'bold' : 'regular'} />
+                    <span>{channel.name}</span>
+                    {channel.name === 'engineering' ? <span className="channel-unread" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="nav-section channel-section voice-section">
+              <div className="nav-section-heading">
+                <span>Voice channels</span>
+                <button type="button" aria-label="Add a voice channel">
+                  <Plus size={16} />
+                </button>
+              </div>
+              <div className="voice-channel-card">
+                <button
+                  type="button"
+                  className="voice-channel-name"
+                  onClick={() => selectConversation('huddle', 'Engineering Room')}
+                >
+                  <SpeakerHigh size={18} weight="fill" />
+                  <span>
+                    <strong>Engineering Room</strong>
+                    <small>Maya, Alex, Sam</small>
+                  </span>
+                  <Users size={15} />
+                  <b>3</b>
+                </button>
+                <div className="voice-channel-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNotice({
+                        tone: 'info',
+                        text: '4K streaming selected. Actual quality adapts to bandwidth and device support.',
+                      })
+                    }
+                  >
+                    <Desktop size={15} /> Stream 4K
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectConversation('huddle', 'Engineering Room')}
+                  >
+                    Join
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+
+          <footer className="user-panel">
+            <button
+              type="button"
+              className="user-identity"
+              onClick={() => setProfileOpen((open) => !open)}
+              aria-expanded={profileOpen}
+            >
+              <PersonAvatar image={AVATARS.alex} name="Alex Rivers" status="online" />
+              <span>
+                <strong>Alex Rivers</strong>
+                <small>Online</small>
+              </span>
+            </button>
+            <IconButton label="Mute microphone">
+              <Microphone size={18} />
+            </IconButton>
+            <IconButton label="Deafen">
+              <Headphones size={18} />
+            </IconButton>
+            <IconButton label="User settings">
+              <GearSix size={18} />
+            </IconButton>
+            {profileOpen ? (
+              <div className="profile-popover" role="dialog" aria-label="Profile menu">
+                <strong>Alex Rivers</strong>
+                <span>Demo account</span>
+                <button type="button">Connect Google account</button>
+              </div>
+            ) : null}
+          </footer>
         </aside>
 
         <section className="conversation-main" aria-label="Active conversation">
           <header className="conversation-header">
             <div className="conversation-header-title">
-              <span
-                className={`conversation-avatar conversation-avatar-${selectedConversation?.kind ?? 'channel'}`}
-                aria-hidden="true"
-              >
-                {selectedConversation?.avatarLabel ?? '#'}
-              </span>
+              {selectedConversation?.kind === 'direct' ? (
+                <PersonAvatar
+                  image={AVATARS.maya}
+                  name={selectedConversation.title}
+                  status="online"
+                  size="small"
+                />
+              ) : (
+                <Hash size={23} weight="bold" />
+              )}
               <div>
-                <h1>
-                  {selectedConversation
-                    ? selectedConversation.kind === 'channel'
-                      ? `# ${selectedConversation.title}`
-                      : selectedConversation.title
-                    : 'Messages'}
-                </h1>
-                <p>{selectedConversation?.presence ?? 'Choose a conversation to begin'}</p>
+                <div className="conversation-title-line">
+                  <h1>
+                    {selectedConversation?.kind === 'direct'
+                      ? selectedConversation.title
+                      : activeChannelName}
+                  </h1>
+                  {selectedConversation?.kind !== 'direct' ? (
+                    <Star size={17} weight="fill" />
+                  ) : null}
+                </div>
+                <p>
+                  {selectedConversation?.kind === 'direct'
+                    ? selectedConversation.presence
+                    : 'Build, ship, and improve Scuttlebutt.'}
+                </p>
               </div>
             </div>
             <div className="conversation-header-actions">
-              <span className="encryption-label">
-                <span aria-hidden="true">▣</span> Encrypted
-              </span>
-              <button type="button" className="icon-button" aria-label="Search this conversation">
-                ⌕
+              <IconButton label="Notifications">
+                <Bell size={19} />
+              </IconButton>
+              <IconButton label="Pinned messages">
+                <PushPin size={19} />
+              </IconButton>
+              <button
+                type="button"
+                className="member-count-button"
+                onClick={() => setMembersVisible((visible) => !visible)}
+                aria-pressed={membersVisible}
+              >
+                <Users size={19} /> 12
               </button>
-              <button type="button" className="icon-button" aria-label="More conversation options">
-                •••
-              </button>
+              <label className="header-search">
+                <MagnifyingGlass size={18} />
+                <span className="visually-hidden">Search this conversation</span>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search"
+                />
+                <kbd>/</kbd>
+              </label>
             </div>
           </header>
 
-          <div
-            className="timeline"
-            data-testid={E2E_SELECTORS.timeline}
-            role="log"
-            aria-live="polite"
-            aria-label="Message timeline"
-          >
-            {selectedConversation?.channelKind === 'voice' ? (
-              <VoicePreviewPanel
-                roomName={selectedConversation.voiceRoomId ?? selectedConversation.id}
-              />
-            ) : (
-              <>
-                {isLoading ? <p className="timeline-state">Loading messages…</p> : null}
-                {!isLoading && filteredMessages.length === 0 ? (
-                  <p className="timeline-state">No messages match this search.</p>
-                ) : null}
-                {!isLoading && filteredMessages.length > 0 ? (
-                  <div className="date-divider">
-                    <span>Today</span>
+          <div className="conversation-body">
+            <div
+              className="timeline"
+              data-testid={E2E_SELECTORS.timeline}
+              role="log"
+              aria-live="polite"
+              aria-label="Message timeline"
+            >
+              {selectedConversation?.channelKind === 'voice' ? (
+                <VoicePreviewPanel
+                  roomName={selectedConversation.voiceRoomId ?? selectedConversation.id}
+                />
+              ) : (
+                <>
+                  {isLoading ? <p className="timeline-state">Loading messages…</p> : null}
+                  {!isLoading && filteredMessages.length === 0 ? (
+                    <p className="timeline-state">No messages match this search.</p>
+                  ) : null}
+                  {!isLoading && filteredMessages.length > 0 ? (
+                    <div className="date-divider">
+                      <span>Today</span>
+                    </div>
+                  ) : null}
+                  {filteredMessages.map((message) => (
+                    <MessageRow
+                      key={message.id}
+                      message={message}
+                      onDelete={(nextMessage) => void handleDelete(nextMessage)}
+                      onEdit={(nextMessage) => {
+                        setEditingMessage(nextMessage);
+                        setReplyTo(undefined);
+                        setComposer(nextMessage.body);
+                      }}
+                      onReact={(nextMessage, emoji) => void handleReact(nextMessage, emoji)}
+                      onReply={(nextMessage) =>
+                        setReplyTo({
+                          id: nextMessage.id,
+                          author: nextMessage.senderName,
+                          body: nextMessage.body,
+                        })
+                      }
+                      onRetry={(nextMessage) =>
+                        void repository
+                          .retryMessage(selectedConversationId, nextMessage.id)
+                          .then(refreshMessages)
+                      }
+                    />
+                  ))}
+                  <div className="typing-indicator" aria-live="polite">
+                    {composer.trim() && !editingMessage ? (
+                      <>
+                        <Waveform size={15} /> You’re typing a reply
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {notice ? (
+              <p
+                className={`notice notice-${notice.tone}`}
+                role={notice.tone === 'error' ? 'alert' : 'status'}
+              >
+                {notice.text}
+              </p>
+            ) : null}
+
+            {selectedConversation?.channelKind === 'voice' ? null : (
+              <form
+                className="composer-shell"
+                data-testid={E2E_SELECTORS.composer}
+                onSubmit={(event) => void handleSubmit(event)}
+              >
+                {editingMessage || replyTo ? (
+                  <div className="composer-context">
+                    <span>
+                      <strong>
+                        {editingMessage ? 'Editing message' : `Replying to ${replyTo?.author}`}
+                      </strong>
+                      {replyTo ? ` · ${replyTo.body}` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMessage(undefined);
+                        setReplyTo(undefined);
+                        if (editingMessage) setComposer('');
+                      }}
+                      aria-label="Cancel composer context"
+                    >
+                      <X size={15} />
+                    </button>
                   </div>
                 ) : null}
-                {filteredMessages.map((message) => (
-                  <MessageRow
-                    key={message.id}
-                    message={message}
-                    onDelete={(nextMessage) => void handleDelete(nextMessage)}
-                    onEdit={handleEdit}
-                    onReact={(nextMessage, emoji) => void handleReact(nextMessage, emoji)}
-                    onReply={(nextMessage) =>
-                      setReplyTo({
-                        id: nextMessage.id,
-                        author: nextMessage.senderName,
-                        body: nextMessage.body,
-                      })
-                    }
-                    onRetry={(nextMessage) => void handleRetry(nextMessage)}
+                {attachments.length > 0 ? (
+                  <div className="attachment-draft-list" aria-label="Attachments ready to send">
+                    {attachments.map((attachment) => (
+                      <span className="attachment-chip" key={attachment.id}>
+                        <FileText size={15} /> {attachment.name}{' '}
+                        <small>{formatFileSize(attachment.size)}</small>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAttachments((current) =>
+                              current.filter(({ id }) => id !== attachment.id),
+                            )
+                          }
+                          aria-label={`Remove ${attachment.name}`}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <label className="composer-input-wrap" htmlFor="message-composer-input">
+                  <span className="visually-hidden">Write a message</span>
+                  <textarea
+                    id="message-composer-input"
+                    value={composer}
+                    onChange={(event) => setComposer(event.target.value)}
+                    onKeyDown={handleComposerKeyDown}
+                    placeholder={`Message #${activeChannelName}`}
+                    rows={1}
+                    disabled={!selectedConversationId || isLoading}
                   />
-                ))}
-                <div className="typing-indicator" aria-live="polite">
-                  {composer.trim() && !editingMessage ? (
-                    <>
-                      <span className="typing-dots" aria-hidden="true">
-                        •••
-                      </span>{' '}
-                      You’re typing a reply
-                    </>
-                  ) : null}
+                </label>
+                <div className="composer-footer">
+                  <div className="composer-tools">
+                    <label className="composer-tool" title="Attach files">
+                      <Plus size={20} />
+                      <span className="visually-hidden">Attach files</span>
+                      <input type="file" multiple onChange={handleFiles} />
+                    </label>
+                    <button type="button" className="composer-tool" aria-label="Formatting">
+                      <span>Aa</span>
+                    </button>
+                    <button type="button" className="composer-tool" aria-label="Mention someone">
+                      <strong>@</strong>
+                    </button>
+                    <button type="button" className="composer-tool" aria-label="Code snippet">
+                      <Code size={19} />
+                    </button>
+                    <label className="composer-tool" title="Attach a file">
+                      <Paperclip size={19} />
+                      <span className="visually-hidden">Attach a file</span>
+                      <input type="file" onChange={handleFiles} />
+                    </label>
+                  </div>
+                  <div className="composer-submit-group">
+                    <button type="button" className="composer-tool" aria-label="Add emoji">
+                      <Smiley size={19} />
+                    </button>
+                    <button
+                      type="submit"
+                      className="send-button"
+                      data-testid={E2E_SELECTORS.sendMessage}
+                      disabled={isSending || (!composer.trim() && attachments.length === 0)}
+                      aria-label="Send message"
+                    >
+                      <PaperPlaneRight size={20} weight="fill" />
+                    </button>
+                  </div>
                 </div>
-              </>
+              </form>
             )}
           </div>
-
-          {notice ? (
-            <p
-              className={`notice notice-${notice.tone}`}
-              role={notice.tone === 'error' ? 'alert' : 'status'}
-            >
-              {notice.text}
-            </p>
-          ) : null}
-
-          {selectedConversation?.channelKind === 'voice' ? null : (
-            <form
-              className="composer-shell"
-              data-testid={E2E_SELECTORS.composer}
-              onSubmit={(event) => void handleSubmit(event)}
-            >
-              {editingMessage ? (
-                <div className="composer-context">
-                  <span>
-                    <strong>Editing message</strong> · changes are saved to this conversation
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingMessage(undefined);
-                      setComposer('');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : null}
-              {replyTo ? (
-                <div className="composer-context">
-                  <span>
-                    <strong>Replying to {replyTo.author}</strong> · {replyTo.body}
-                  </span>
-                  <button type="button" onClick={() => setReplyTo(undefined)}>
-                    Cancel
-                  </button>
-                </div>
-              ) : null}
-              {attachments.length > 0 ? (
-                <div className="attachment-draft-list" aria-label="Attachments ready to send">
-                  {attachments.map((attachment) => (
-                    <span className="attachment-chip" key={attachment.id}>
-                      {attachment.name} <small>{formatFileSize(attachment.size)}</small>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAttachments((current) =>
-                            current.filter(({ id }) => id !== attachment.id),
-                          )
-                        }
-                        aria-label={`Remove ${attachment.name}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <div className="composer-input-row">
-                <label className="visually-hidden" htmlFor="message-composer-input">
-                  Write a message
-                </label>
-                <textarea
-                  id="message-composer-input"
-                  value={composer}
-                  onChange={(event) => setComposer(event.target.value)}
-                  onKeyDown={handleComposerKeyDown}
-                  placeholder={
-                    selectedConversation
-                      ? `Message ${selectedConversation.title}`
-                      : 'Choose a conversation'
-                  }
-                  rows={1}
-                  disabled={!selectedConversationId || isLoading}
-                />
-                <button
-                  type="submit"
-                  className="send-button"
-                  data-testid={E2E_SELECTORS.sendMessage}
-                  disabled={isSending || (!composer.trim() && attachments.length === 0)}
-                >
-                  {isSending ? '…' : 'Send'}
-                </button>
-              </div>
-              <div className="composer-footer">
-                <div className="composer-tools">
-                  <label className="tool-button" title="Attach files">
-                    <span aria-hidden="true">＋</span>
-                    <span className="visually-hidden">Attach files</span>
-                    <input type="file" multiple onChange={handleFiles} />
-                  </label>
-                  <button type="button" className="tool-button" aria-label="Add emoji">
-                    ☺
-                  </button>
-                  <button type="button" className="tool-button" aria-label="Record voice message">
-                    ◉
-                  </button>
-                </div>
-                <span className="composer-hint">Enter to send · Shift + Enter for a new line</span>
-              </div>
-            </form>
-          )}
         </section>
 
-        <aside className="details-sidebar" aria-label="Conversation details">
-          <div className="details-heading">
-            <p className="section-kicker">Conversation</p>
-            <button type="button" className="icon-button" aria-label="Close details">
-              ×
+        {membersVisible ? (
+          <aside className="members-sidebar" aria-label="Community members">
+            <MemberGroup
+              title="Online"
+              count={5}
+              members={MEMBERS.filter(({ status }) => status === 'online')}
+            />
+            <MemberGroup
+              title="Away"
+              count={2}
+              members={MEMBERS.filter(({ status }) => status === 'away')}
+            />
+            <MemberGroup
+              title="Offline"
+              count={2}
+              members={MEMBERS.filter(({ status }) => status === 'offline')}
+            />
+            <button
+              type="button"
+              className="invite-button"
+              onClick={() =>
+                setNotice({
+                  tone: 'info',
+                  text: 'Invite creation is ready for the friend-code API.',
+                })
+              }
+            >
+              <Users size={17} /> Invite members
             </button>
-          </div>
-          <div className="details-avatar">{selectedConversation?.avatarLabel ?? '#'}</div>
-          <h2>{selectedConversation?.title ?? 'Messages'}</h2>
-          <p className="details-subtitle">
-            {selectedConversation?.kind === 'channel'
-              ? 'A quiet place for the team to gather.'
-              : selectedConversation?.presence}
-          </p>
-          <div className="details-stat-grid">
-            <div>
-              <strong>{selectedConversation?.members ?? 0}</strong>
-              <span>Members</span>
-            </div>
-            <div>
-              <strong>Private</strong>
-              <span>Visibility</span>
-            </div>
-          </div>
-          <div className="details-section">
-            <h3>Community server</h3>
-            <p className="details-note">
-              {DEMO_COMMUNITY.name} is a Matrix space on {DEMO_COMMUNITY.homeserverUrl}. It is not
-              the homeserver itself.
-            </p>
-          </div>
-          <div className="details-section">
-            <h3>Shared space</h3>
-            <button type="button" className="detail-link">
-              <span>⌁</span> Files and links <span>›</span>
-            </button>
-            <button type="button" className="detail-link">
-              <span>☆</span> Pinned messages <span>›</span>
-            </button>
-          </div>
-          <div className="details-section">
-            <h3>Notifications</h3>
-            <button type="button" className="notification-toggle" aria-pressed="true">
-              <span className="toggle-on" /> Mentions and replies
-            </button>
-          </div>
-        </aside>
-      </div>
+          </aside>
+        ) : null}
+      </section>
     </main>
+  );
+}
+
+function MemberGroup({
+  count,
+  members,
+  title,
+}: {
+  count: number;
+  members: Member[];
+  title: string;
+}) {
+  return (
+    <section className="member-group">
+      <h2>
+        {title} — {count}
+      </h2>
+      <div className="member-list">
+        {members.map((member) => (
+          <button type="button" className={`member-row member-${member.status}`} key={member.name}>
+            <PersonAvatar image={member.avatar} name={member.name} status={member.status} />
+            <span>
+              <strong>{member.name}</strong>
+              <small>{member.note}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
