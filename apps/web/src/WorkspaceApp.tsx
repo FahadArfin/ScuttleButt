@@ -13,6 +13,7 @@ import {
   Camera,
   CaretDown,
   ChatCenteredDots,
+  Check,
   Code,
   Confetti,
   Compass,
@@ -21,7 +22,6 @@ import {
   GearSix,
   Hash,
   Headphones,
-  House,
   Leaf,
   LockSimple,
   MagnifyingGlass,
@@ -49,6 +49,12 @@ import { E2E_SELECTORS } from '@scuttlebutt/testing';
 
 import { MessageRow, PersonAvatar } from './App.js';
 import type { SignedInUser } from './auth.js';
+import {
+  loadFriendState,
+  respondToFriendRequest,
+  sendFriendRequest,
+  type FriendState,
+} from './friends.js';
 import {
   createDemoMessagingRepository,
   createSyncedMessagingRepository,
@@ -200,7 +206,12 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
   const [friendDialogOpen, setFriendDialogOpen] = useState(false);
-  const [friendCode] = useState(loadFriendCode);
+  const [friendState, setFriendState] = useState<FriendState>({
+    friendCode: user.friendCode ?? loadFriendCode(),
+    friends: [],
+    incoming: [],
+    outgoing: [],
+  });
   const [profile, setProfile] = useState(() => loadProfile(user));
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
@@ -220,7 +231,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   );
 
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
-  const directMessages = conversations.filter(({ kind }) => kind === 'direct');
+  const directMessages = conversations.filter(
+    ({ id, kind }) => kind === 'direct' && !id.startsWith('friend-'),
+  );
+  const friendCode = friendState.friendCode;
   const activeGroup = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
   const joinedVoice = groups
     .flatMap((group) =>
@@ -250,7 +264,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         if (!mounted) return;
         if (workspace) {
           setGroups(workspace.groups);
-          setCustomDms(workspace.dms);
+          setCustomDms(workspace.dms.filter(({ id }) => !id.startsWith('friend-')));
           setCloudWorkspaceExists(true);
         }
         setWorkspaceReady(true);
@@ -264,6 +278,26 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       mounted = false;
     };
   }, [googleCredential]);
+
+  useEffect(() => {
+    if (!googleCredential) return;
+    let mounted = true;
+    const refresh = () => {
+      void loadFriendState(googleCredential)
+        .then((state) => {
+          if (!mounted) return;
+          setFriendState(state);
+          void repository.getConversations().then(setConversations);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 5000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [googleCredential, repository]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -620,27 +654,41 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       setNotice({ tone: 'error', text: 'That is your own friend code.' });
       return;
     }
-    const conversation: Conversation = {
-      id: `friend-${code.toLowerCase()}`,
-      title: `Friend ${code}`,
-      kind: 'direct',
-      avatarLabel: code.slice(0, 2),
-      presence: 'Friend request sent',
-      preview: 'Start a private conversation when they accept.',
-      updatedAt: 'Now',
-      unreadCount: 0,
-      encrypted: true,
-      members: 2,
-    };
-    await repository.createConversation(conversation);
-    setCustomDms((current) =>
-      current.some(({ id }) => id === conversation.id) ? current : [...current, conversation],
-    );
-    await refreshConversations();
-    setFriendDialogOpen(false);
-    setActiveSurface('dms');
-    setSelectedConversationId(conversation.id);
-    setNotice({ tone: 'info', text: `Friend request sent to ${code}.` });
+    if (!googleCredential) {
+      setNotice({ tone: 'error', text: 'Sign in with Google to add friends.' });
+      return;
+    }
+    try {
+      const { recipient } = await sendFriendRequest(googleCredential, code);
+      setFriendState(await loadFriendState(googleCredential));
+      setFriendDialogOpen(false);
+      setActiveSurface('dms');
+      setSelectedConversationId('');
+      setNotice({ tone: 'info', text: `Friend request sent to ${recipient.name}.` });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Friend request could not be sent.',
+      });
+    }
+  };
+
+  const handleFriendResponse = async (requesterId: string, action: 'accept' | 'decline') => {
+    if (!googleCredential) return;
+    try {
+      await respondToFriendRequest(googleCredential, requesterId, action);
+      setFriendState(await loadFriendState(googleCredential));
+      await refreshConversations();
+      setNotice({
+        tone: 'info',
+        text: action === 'accept' ? 'Friend request accepted.' : 'Friend request declined.',
+      });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Friend request could not be updated.',
+      });
+    }
   };
 
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
@@ -720,6 +768,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               <DirectMessageNavigation
                 activeSurface={activeSurface}
                 conversations={directMessages}
+                pendingFriendCount={friendState.incoming.length}
                 selectedConversationId={selectedConversationId}
                 onCreate={() => setDialogMode('dm')}
                 onHome={() => {
@@ -969,7 +1018,9 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               onCreateDm={() => setDialogMode('dm')}
               onCreateGroup={() => setDialogMode('group')}
               friendCode={friendCode}
+              friendState={friendState}
               onAddFriend={() => setFriendDialogOpen(true)}
+              onFriendResponse={(id, action) => void handleFriendResponse(id, action)}
               onOpenGroup={openGroup}
             />
           )}
@@ -1175,6 +1226,7 @@ function DirectMessageNavigation({
   onHome,
   onSelect,
   onThreads,
+  pendingFriendCount,
   selectedConversationId,
 }: {
   activeSurface: AppSurface;
@@ -1183,6 +1235,7 @@ function DirectMessageNavigation({
   onHome: () => void;
   onSelect: (id: string) => void;
   onThreads: () => void;
+  pendingFriendCount: number;
   selectedConversationId: string;
 }) {
   return (
@@ -1193,7 +1246,8 @@ function DirectMessageNavigation({
           className={`primary-nav-item ${activeSurface === 'dms' && !selectedConversationId ? 'primary-nav-item-active' : ''}`}
           onClick={onHome}
         >
-          <House size={19} weight="fill" /> Home
+          <Users size={19} weight="fill" /> Friends
+          {pendingFriendCount > 0 ? <strong className="nav-request-count">{pendingFriendCount}</strong> : null}
         </button>
         <button
           type="button"
@@ -1219,9 +1273,7 @@ function DirectMessageNavigation({
               onClick={() => onSelect(conversation.id)}
             >
               <PersonAvatar
-                image={
-                  '/scuttlebutt-mark.webp'
-                }
+                image={conversation.avatarUrl ?? '/scuttlebutt-mark.webp'}
                 name={conversation.title}
                 status="online"
                 size="small"
@@ -1696,18 +1748,22 @@ function Composer({
 
 function LandingPanel({
   friendCode,
+  friendState,
   groups,
   onAddFriend,
   onCreateDm,
   onCreateGroup,
+  onFriendResponse,
   onOpenGroup,
   surface,
 }: {
   friendCode: string;
+  friendState: FriendState;
   groups: WorkspaceGroup[];
   onAddFriend: () => void;
   onCreateDm: () => void;
   onCreateGroup: () => void;
+  onFriendResponse: (id: string, action: 'accept' | 'decline') => void;
   onOpenGroup: (groupId: string) => void;
   surface: AppSurface;
 }) {
@@ -1748,6 +1804,65 @@ function LandingPanel({
           </article>
         </div>
       ) : (
+        <>
+        {!isExplore ? (
+          <section className="friend-hub" aria-label="Friends">
+            <div className="friend-hub-heading">
+              <div>
+                <h2>Friends</h2>
+                <p>Requests must be accepted before a direct message opens.</p>
+              </div>
+              {friendState.incoming.length > 0 ? (
+                <span>{friendState.incoming.length} pending</span>
+              ) : null}
+            </div>
+            {friendState.incoming.length > 0 ? (
+              <div className="friend-request-list">
+                {friendState.incoming.map((friend) => (
+                  <article className="friend-request-row" key={friend.id}>
+                    <PersonAvatar
+                      image={friend.avatarUrl ?? '/scuttlebutt-mark.webp'}
+                      name={friend.name}
+                      status="online"
+                    />
+                    <span><strong>{friend.name}</strong><small>Incoming friend request</small></span>
+                    <button
+                      type="button"
+                      className="friend-accept"
+                      aria-label={`Accept ${friend.name}`}
+                      onClick={() => onFriendResponse(friend.id, 'accept')}
+                    ><Check size={18} weight="bold" /></button>
+                    <button
+                      type="button"
+                      className="friend-decline"
+                      aria-label={`Decline ${friend.name}`}
+                      onClick={() => onFriendResponse(friend.id, 'decline')}
+                    ><X size={18} weight="bold" /></button>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            {friendState.friends.length > 0 ? (
+              <div className="friend-list-grid">
+                {friendState.friends.map((friend) => (
+                  <article className="friend-list-card" key={friend.id}>
+                    <PersonAvatar image={friend.avatarUrl ?? '/scuttlebutt-mark.webp'} name={friend.name} status="online" />
+                    <span><strong>{friend.name}</strong><small>{friend.bio || 'Friend'}</small></span>
+                    <ChatCenteredDots size={19} />
+                  </article>
+                ))}
+              </div>
+            ) : friendState.incoming.length === 0 ? (
+              <p className="friend-empty">No friends yet. Share your code or add someone below.</p>
+            ) : null}
+            {friendState.outgoing.length > 0 ? (
+              <div className="outgoing-requests">
+                <strong>Outgoing requests</strong>
+                <span>{friendState.outgoing.map(({ name }) => name).join(', ')}</span>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         <div className="landing-card-grid">
           {!isExplore ? (
             <article className="landing-card friend-code-card">
@@ -1796,6 +1911,7 @@ function LandingPanel({
             </span>
           </button>
         </div>
+        </>
       )}
     </div>
   );

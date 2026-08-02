@@ -54,6 +54,15 @@ interface MessageMutationBody extends ConversationRequestBody {
   value?: string;
 }
 
+interface FriendRequestBody extends GoogleCredentialBody {
+  code: string;
+}
+
+interface FriendResponseBody extends GoogleCredentialBody {
+  action: 'accept' | 'decline';
+  requesterId: string;
+}
+
 export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: true });
   const google = options.googleClientId ? new OAuth2Client(options.googleClientId) : undefined;
@@ -124,7 +133,8 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
           joinedServerIds: [],
           onboardingCompleted: false,
         };
-    return { user };
+    const friendCode = database ? await database.getOrCreateFriendCode(user.id) : null;
+    return { user: { ...user, friendCode } };
   });
 
   app.put<{ Body: ProfileBody }>('/api/profile', async (request, reply) => {
@@ -169,7 +179,31 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
           email: payload.email,
           onboardingCompleted: true,
         };
-    return { user };
+    const friendCode = database ? await database.getOrCreateFriendCode(user.id) : null;
+    return { user: { ...user, friendCode } };
+  });
+
+  app.post<{ Body: GoogleCredentialBody }>('/api/friends/list', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    return database!.listFriends(userId);
+  });
+
+  app.post<{ Body: FriendRequestBody }>('/api/friends/request', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    const code = request.body.code.replace(/[\s-]/g, '').toUpperCase();
+    if (!/^[A-Z2-9]{6}$/.test(code)) {
+      throw Object.assign(new Error('Enter a valid friend code.'), { statusCode: 400 });
+    }
+    return { recipient: await database!.requestFriend(userId, code) };
+  });
+
+  app.post<{ Body: FriendResponseBody }>('/api/friends/respond', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    if (!['accept', 'decline'].includes(request.body.action)) {
+      throw Object.assign(new Error('Friend response is invalid.'), { statusCode: 400 });
+    }
+    await database!.respondToFriendRequest(userId, request.body.requesterId, request.body.action);
+    return { saved: true };
   });
 
   app.post<{ Body: GoogleCredentialBody }>('/api/sync/workspace/load', async (request) => {

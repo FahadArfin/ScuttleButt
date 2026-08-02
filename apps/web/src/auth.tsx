@@ -9,6 +9,7 @@ export interface SignedInUser {
   backgroundColor: string;
   bio: string;
   email: string;
+  friendCode: string | null;
   id: string;
   interests: string[];
   joinedServerIds: string[];
@@ -26,6 +27,7 @@ function normalizeUser(user: Partial<SignedInUser> & Pick<SignedInUser, 'email' 
     backgroundColor: user.backgroundColor ?? '#5865f2',
     bio: user.bio ?? '',
     email: user.email,
+    friendCode: user.friendCode ?? null,
     id: user.id,
     interests: user.interests ?? [],
     joinedServerIds: user.joinedServerIds ?? [],
@@ -128,6 +130,7 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
       backgroundColor: '#5865f2',
       bio: '',
       email: 'local@scuttlebutt.test',
+      friendCode: null,
       id: 'local-user',
       interests: [],
       joinedServerIds: [],

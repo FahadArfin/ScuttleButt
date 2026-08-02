@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { Pool } from 'pg';
 
@@ -29,6 +29,23 @@ export interface SyncedWorkspace {
   dms: unknown[];
   groups: unknown[];
 }
+
+export interface FriendProfile {
+  avatarUrl: string | null;
+  bio: string;
+  id: string;
+  name: string;
+  tags: string[];
+}
+
+export interface FriendState {
+  friendCode: string;
+  friends: FriendProfile[];
+  incoming: FriendProfile[];
+  outgoing: FriendProfile[];
+}
+
+const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export class ScuttlebuttDatabase {
   readonly pool: Pool;
@@ -137,9 +154,11 @@ export class ScuttlebuttDatabase {
       CREATE TABLE IF NOT EXISTS synced_conversation_members (
         conversation_id text NOT NULL REFERENCES synced_conversations(id) ON DELETE CASCADE,
         user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        conversation jsonb,
         joined_at timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (conversation_id, user_id)
       );
+      ALTER TABLE synced_conversation_members ADD COLUMN IF NOT EXISTS conversation jsonb;
       CREATE TABLE IF NOT EXISTS synced_messages (
         id text PRIMARY KEY,
         conversation_id text NOT NULL REFERENCES synced_conversations(id) ON DELETE CASCADE,
@@ -228,6 +247,156 @@ export class ScuttlebuttDatabase {
     return id;
   }
 
+  async getOrCreateFriendCode(userId: string): Promise<string> {
+    const existing = await this.pool.query<{ code_digest: string }>(
+      'SELECT code_digest FROM friend_codes WHERE user_id = $1',
+      [userId],
+    );
+    if (existing.rows[0]) return existing.rows[0].code_digest;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const bytes = randomBytes(6);
+      const code = Array.from(
+        bytes,
+        (value) => FRIEND_CODE_ALPHABET[value % FRIEND_CODE_ALPHABET.length],
+      ).join('');
+      const inserted = await this.pool.query<{ code_digest: string }>(
+        `INSERT INTO friend_codes (user_id, code_digest) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING RETURNING code_digest`,
+        [userId, code],
+      );
+      if (inserted.rows[0]) return inserted.rows[0].code_digest;
+    }
+    throw new Error('A unique friend code could not be generated.');
+  }
+
+  async listFriends(userId: string): Promise<FriendState> {
+    const profileColumns = `u.id, u.display_name AS name, u.avatar_url AS "avatarUrl",
+      u.profile_bio AS bio, u.profile_tags AS tags`;
+    const [friends, incoming, outgoing, friendCode] = await Promise.all([
+      this.pool.query<FriendProfile>(
+        `SELECT ${profileColumns} FROM friendships f
+         JOIN users u ON u.id = CASE WHEN f.requester_id = $1 THEN f.recipient_id ELSE f.requester_id END
+         WHERE (f.requester_id = $1 OR f.recipient_id = $1) AND f.status = 'accepted'
+         ORDER BY u.display_name`,
+        [userId],
+      ),
+      this.pool.query<FriendProfile>(
+        `SELECT ${profileColumns} FROM friendships f JOIN users u ON u.id = f.requester_id
+         WHERE f.recipient_id = $1 AND f.status = 'pending' ORDER BY f.created_at DESC`,
+        [userId],
+      ),
+      this.pool.query<FriendProfile>(
+        `SELECT ${profileColumns} FROM friendships f JOIN users u ON u.id = f.recipient_id
+         WHERE f.requester_id = $1 AND f.status = 'pending' ORDER BY f.created_at DESC`,
+        [userId],
+      ),
+      this.getOrCreateFriendCode(userId),
+    ]);
+    return {
+      friendCode,
+      friends: friends.rows,
+      incoming: incoming.rows,
+      outgoing: outgoing.rows,
+    };
+  }
+
+  async requestFriend(userId: string, code: string): Promise<FriendProfile> {
+    const recipient = await this.pool.query<FriendProfile>(
+      `SELECT u.id, u.display_name AS name, u.avatar_url AS "avatarUrl",
+        u.profile_bio AS bio, u.profile_tags AS tags
+       FROM friend_codes fc JOIN users u ON u.id = fc.user_id WHERE fc.code_digest = $1`,
+      [code],
+    );
+    const profile = recipient.rows[0];
+    if (!profile) throw Object.assign(new Error('No user has that friend code.'), { statusCode: 404 });
+    if (profile.id === userId) {
+      throw Object.assign(new Error('You cannot add your own friend code.'), { statusCode: 400 });
+    }
+    const accepted = await this.pool.query(
+      `SELECT 1 FROM friendships WHERE status = 'accepted' AND
+       ((requester_id = $1 AND recipient_id = $2) OR (requester_id = $2 AND recipient_id = $1))`,
+      [userId, profile.id],
+    );
+    if (accepted.rowCount) {
+      throw Object.assign(new Error('You are already friends.'), { statusCode: 409 });
+    }
+    await this.pool.query(
+      `INSERT INTO friendships (requester_id, recipient_id, status) VALUES ($1, $2, 'pending')
+       ON CONFLICT (requester_id, recipient_id) DO UPDATE SET status = 'pending', updated_at = now()`,
+      [userId, profile.id],
+    );
+    return profile;
+  }
+
+  async respondToFriendRequest(
+    userId: string,
+    requesterId: string,
+    action: 'accept' | 'decline',
+  ): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const updated = await client.query(
+        `UPDATE friendships SET status = $3, updated_at = now()
+         WHERE requester_id = $1 AND recipient_id = $2 AND status = 'pending' RETURNING requester_id`,
+        [requesterId, userId, action === 'accept' ? 'accepted' : 'declined'],
+      );
+      if (!updated.rowCount) {
+        throw Object.assign(new Error('Friend request was not found.'), { statusCode: 404 });
+      }
+      if (action === 'accept') {
+        await client.query(
+          `DELETE FROM friendships
+           WHERE requester_id = $1 AND recipient_id = $2 AND status = 'pending'`,
+          [userId, requesterId],
+        );
+        const profiles = await client.query<FriendProfile>(
+          `SELECT id, display_name AS name, avatar_url AS "avatarUrl",
+            profile_bio AS bio, profile_tags AS tags FROM users WHERE id = ANY($1::uuid[])`,
+          [[userId, requesterId]],
+        );
+        const recipient = profiles.rows.find(({ id }) => id === userId)!;
+        const requester = profiles.rows.find(({ id }) => id === requesterId)!;
+        const conversationId = `dm-${[userId, requesterId].sort().join('-')}`;
+        const conversationFor = (friend: FriendProfile) => ({
+          id: conversationId,
+          title: friend.name,
+          kind: 'direct',
+          avatarLabel: friend.name.slice(0, 2).toUpperCase(),
+          avatarUrl: friend.avatarUrl,
+          presence: 'Friend',
+          preview: 'Start a private conversation.',
+          updatedAt: 'Now',
+          unreadCount: 0,
+          encrypted: true,
+          members: 2,
+        });
+        await client.query(
+          `INSERT INTO synced_conversations (id, conversation) VALUES ($1, $2::jsonb)
+           ON CONFLICT (id) DO NOTHING`,
+          [conversationId, JSON.stringify(conversationFor(requester))],
+        );
+        for (const [memberId, conversation] of [
+          [userId, conversationFor(requester)],
+          [requesterId, conversationFor(recipient)],
+        ] as const) {
+          await client.query(
+            `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
+             VALUES ($1, $2, $3::jsonb)
+             ON CONFLICT (conversation_id, user_id) DO UPDATE SET conversation = EXCLUDED.conversation`,
+            [conversationId, memberId, JSON.stringify(conversation)],
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async getWorkspace(userId: string): Promise<SyncedWorkspace | null> {
     const result = await this.pool.query<{ dms: unknown[]; groups: unknown[] }>(
       'SELECT groups, dms FROM user_workspace_state WHERE user_id = $1',
@@ -253,16 +422,17 @@ export class ScuttlebuttDatabase {
       [conversation.id, JSON.stringify(conversation)],
     );
     await this.pool.query(
-      `INSERT INTO synced_conversation_members (conversation_id, user_id) VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [conversation.id, userId],
+      `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
+       VALUES ($1, $2, $3::jsonb)
+       ON CONFLICT (conversation_id, user_id) DO UPDATE SET conversation = EXCLUDED.conversation`,
+      [conversation.id, userId, JSON.stringify(conversation)],
     );
     return conversation;
   }
 
   async listConversations(userId: string): Promise<unknown[]> {
     const result = await this.pool.query<{ conversation: unknown }>(
-      `SELECT c.conversation FROM synced_conversations c
+      `SELECT COALESCE(m.conversation, c.conversation) AS conversation FROM synced_conversations c
        JOIN synced_conversation_members m ON m.conversation_id = c.id
        WHERE m.user_id = $1 ORDER BY c.updated_at DESC`,
       [userId],

@@ -8,6 +8,7 @@ export interface Conversation {
   title: string;
   kind: ConversationKind;
   avatarLabel: string;
+  avatarUrl?: string | null;
   presence: string;
   preview: string;
   updatedAt: string;
