@@ -1,0 +1,25 @@
+{
+  "name": "@scuttlebutt/matrix-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "matrix-js-sdk": "42.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2"
+  }
+}

@@ -32,9 +32,11 @@ Matrix login/registration, E2EE, federation, friend-code generation, uploads, Li
 - CI runs the same checks on pull requests.
 - No hard-coded secrets or placeholder security code is introduced.
 
-## Phase 2 — Local Matrix integration
+## Phase 2 — Local Matrix integration (complete)
 
 Add a local Synapse/PostgreSQL environment and implement the smallest verified flow: registration, login, logout, session restore, device list/revocation, room creation, and encrypted one-to-one message exchange. Prove that the homeserver database does not contain readable message bodies.
+
+Acceptance checks passed on 2026-08-02. See [the Phase 2 report](phase-2-report.md).
 
 ## Phase 3 — Friend codes and contacts
 

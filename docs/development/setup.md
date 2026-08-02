@@ -1,12 +1,13 @@
 # Development setup
 
-This guide covers the Phase 1 foundation only. It starts the web shell and platform API; it does not start Synapse, PostgreSQL, LiveKit, Coturn, MinIO, or any production service.
+This guide covers the Phase 2 local development environment. It starts the web shell and platform API separately from the local Synapse/PostgreSQL stack; it does not start LiveKit, Coturn, MinIO, or any production service.
 
 ## Requirements
 
 - Node.js 22.14.0
 - pnpm 11.9.0
 - Git
+- Docker Desktop with Linux containers
 
 The repository records the Node version in `.nvmrc` and the pnpm version in the root `package.json`.
 
@@ -33,6 +34,24 @@ The command builds shared packages once, then starts:
 
 The API only exposes a typed health response in Phase 1. It has no authentication, database, business data, or Matrix integration.
 
+## Run the local Matrix environment
+
+```bash
+pnpm matrix:prepare
+pnpm matrix:up
+pnpm matrix:test
+```
+
+This starts PostgreSQL 17 and Synapse 1.157.2. The homeserver is available at `http://127.0.0.1:8008`. Generated local signing keys, registration secrets, media, and database files live under ignored paths in `infrastructure/matrix/`.
+
+Stop the local services with:
+
+```bash
+pnpm matrix:down
+```
+
+The Matrix client boundary is in `packages/matrix-client`. It owns Matrix registration, login/session handling, device operations, encrypted room creation, and encrypted text exchange. The integration test uses an in-memory crypto store; persistent browser key storage is a later task.
+
 ## Verify changes
 
 ```bash
@@ -54,9 +73,11 @@ pnpm test:e2e
 - `packages/config`: validated runtime configuration defaults.
 - `packages/ui`: reusable accessible UI shell component.
 - `packages/testing`: shared selectors and test constants.
+- `packages/matrix-client`: typed Matrix SDK boundary and local integration test.
+- `infrastructure/matrix`: Docker Compose and local Synapse setup instructions.
 
 Build output is generated under package `dist/` directories and is ignored by Git. Turborepo cache is stored under `.turbo/` and is also ignored.
 
 ## Phase boundary
 
-Do not add Matrix, E2EE, federation, uploads, LiveKit, desktop, mobile, or production Compose work to this foundation task. Those belong to later roadmap phases and require their own acceptance criteria.
+Phase 2 is complete. Do not add friend codes, contacts, the full messaging interface, communities, calls, uploads, desktop, mobile, or production deployment work to this task. Those belong to later roadmap phases and require their own acceptance criteria.

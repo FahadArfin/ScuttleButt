@@ -4,7 +4,7 @@ Scuttlebutt is planned as an open-source, self-hosted communication app with fed
 
 ## Project status
 
-Phase 1 (monorepo foundation) is complete. Product features are intentionally not implemented yet.
+Phase 2 (local Matrix integration) is complete. The product UI and contact/community features are intentionally not implemented yet.
 
 Start with:
 
@@ -17,6 +17,8 @@ Start with:
 - [Architecture decisions](docs/decisions/)
 - [Development setup](docs/development/setup.md)
 - [Phase 1 report](docs/phase-1-report.md)
+- [Local Matrix environment](infrastructure/matrix/README.md)
+- [Phase 2 report](docs/phase-2-report.md)
 
 ## Development
 
@@ -36,13 +38,18 @@ Useful checks:
 pnpm check
 pnpm build
 pnpm test:e2e
+
+pnpm matrix:prepare
+pnpm matrix:up
+pnpm matrix:test
 ```
 
 The API health endpoint is available at `http://127.0.0.1:3001/health`.
+The local Matrix homeserver is available at `http://127.0.0.1:8008` after the Matrix setup commands complete.
 
 ## Current boundary
 
-Phase 1 created the monorepo and development shells only: a minimal React/Vite web app, a minimal TypeScript platform API with a health endpoint, shared package scaffolding, formatting/linting/typecheck/test commands, CI, and documentation structure. It does not implement registration, messaging, E2EE, federation, calls, uploads, or production deployment.
+Phase 2 adds a local Synapse/PostgreSQL environment and a typed Matrix client boundary for registration, login, logout, session restore, device listing/revocation, encrypted direct-room creation, and encrypted text exchange. The UI is still a foundation shell; friend codes, community servers, calls, uploads, desktop, mobile, and production deployment remain future phases.
 
 ## Important terminology
 

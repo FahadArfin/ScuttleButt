@@ -5,6 +5,8 @@ build/
 coverage/
 playwright-report/
 test-results/
+infrastructure/matrix/data/
+infrastructure/matrix/postgres/
 .env
 .env.*
 !.env.example
