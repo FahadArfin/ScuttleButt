@@ -106,6 +106,8 @@ The production-readiness contract foundation is implemented and tested in `@scut
 
 Define shared contracts, push design, mobile key storage, background calls, bandwidth modes, deep links, and device verification before choosing React Native versus native clients.
 
+The contract-only mobile preparation foundation is implemented and tested in `@scuttlebutt/mobile-preparation`. It intentionally does not build a mobile application or choose React Native versus native Swift/Kotlin; native OS prototypes, platform measurements, and the architecture decision remain. See [the Phase 13 report](phase-13-report.md).
+
 ## Phase 1 task sequence
 
 1. Record Node/pnpm versions and create workspace root.

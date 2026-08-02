@@ -145,6 +145,8 @@ importers:
 
   packages/media-profile: {}
 
+  packages/mobile-preparation: {}
+
   packages/moderation: {}
 
   packages/production-hardening: {}
