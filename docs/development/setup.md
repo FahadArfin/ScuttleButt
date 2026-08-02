@@ -81,3 +81,5 @@ Build output is generated under package `dist/` directories and is ignored by Gi
 ## Phase boundary
 
 Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary; a local LiveKit/Coturn stack is still required for real media validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.
+
+Start the local voice infrastructure with `pnpm voice:up` and stop it with `pnpm voice:down`. The web voice panel is a preview until a server-issued short-lived LiveKit token, a MatrixRTC membership check, and a dedicated E2EE worker are supplied.

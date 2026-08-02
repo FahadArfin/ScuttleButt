@@ -1,0 +1,27 @@
+services:
+  redis:
+    image: redis:7-alpine
+
+  livekit:
+    image: livekit/livekit-server:v1.9.0
+    depends_on:
+      - redis
+      - coturn
+    command: --config /etc/livekit/livekit.yaml
+    ports:
+      - '7880:7880'
+      - '7881:7881'
+      - '7882:7882/udp'
+      - '50000-50010:50000-50010/udp'
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    command: -c /etc/coturn/turnserver.conf
+    ports:
+      - '3478:3478'
+      - '3478:3478/udp'
+      - '49152-49200:49152-49200/udp'
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro

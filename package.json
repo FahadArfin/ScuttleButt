@@ -17,6 +17,8 @@
     "matrix:up": "docker compose -f infrastructure/matrix/docker-compose.yml up -d",
     "matrix:down": "docker compose -f infrastructure/matrix/docker-compose.yml down",
     "matrix:test": "node scripts/run-matrix-test.mjs",
+    "voice:up": "docker compose -f infrastructure/livekit/docker-compose.yml up -d",
+    "voice:down": "docker compose -f infrastructure/livekit/docker-compose.yml down",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "playwright test --config=apps/web/playwright.config.ts",

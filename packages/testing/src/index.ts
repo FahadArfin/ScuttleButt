@@ -5,4 +5,5 @@ export const E2E_SELECTORS = {
   message: 'message',
   sendMessage: 'send-message',
   timeline: 'message-timeline',
+  voicePanel: 'voice-poc-panel',
 } as const;

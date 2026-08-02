@@ -24,3 +24,14 @@ test('sends a message and supports a reply context', async ({ page }) => {
   await page.getByRole('button', { name: 'Reply to Jordan Lee' }).first().click();
   await expect(page.getByText('Replying to Jordan Lee')).toBeVisible();
 });
+
+test('opens the voice proof-of-concept controls for a voice channel', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: /huddle/ }).click();
+  await expect(page.getByTestId('voice-poc-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Join voice preview' }).click();
+  await expect(page.getByText('connected', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Mute' }).click();
+  await expect(page.getByRole('button', { name: 'Unmute' })).toBeVisible();
+});

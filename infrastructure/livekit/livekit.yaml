@@ -1,0 +1,28 @@
+port: 7880
+log_level: info
+
+redis:
+  address: redis:6379
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  port_range_start: 50000
+  port_range_end: 50010
+  use_external_ip: false
+  allow_tcp_fallback: true
+  turn_servers:
+    - host: host.docker.internal
+      port: 3478
+      protocol: udp
+      secret: scuttlebutt-turn-dev-secret
+      ttl: 300
+    - host: host.docker.internal
+      port: 3478
+      protocol: tcp
+      secret: scuttlebutt-turn-dev-secret
+      ttl: 300
+
+# Development-only credentials. The token issuer must never expose this secret to a browser.
+keys:
+  devkey: scuttlebutt-livekit-dev-secret

@@ -56,9 +56,11 @@ Map communities to Matrix spaces/rooms. Add categories, text channels, membershi
 
 The community domain and Matrix mapping foundation are implemented and tested. A live Synapse space/channel integration fixture and authenticated community API remain explicit follow-up work. See [the Phase 5 report](phase-5-report.md).
 
-## Phase 6 — Voice proof of concept
+## Phase 6 — Voice proof of concept (foundation in progress)
 
 Integrate MatrixRTC-compatible call signaling with self-hosted LiveKit and Coturn. Validate three local participants, short-lived tokens, reconnection, TURN fallback, and media E2EE configuration.
+
+The client and local infrastructure foundation is implemented. Three-browser media validation, TURN-only testing, and the authenticated MatrixRTC token issuer remain before this phase is complete. See [the Phase 6 report](phase-6-report.md).
 
 ## Phase 7 — Video and screen sharing
 

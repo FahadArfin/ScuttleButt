@@ -4,7 +4,7 @@ Scuttlebutt is planned as an open-source, self-hosted communication app with fed
 
 ## Project status
 
-Phase 5 community-server/channel foundation is complete. Phase 6 voice proof-of-concept work is next; browser session wiring, live SFU validation, and persistent contact API routes remain intentionally staged.
+Phase 6 voice proof-of-concept foundation is in progress. Phase 5 community-server/channel mapping is available as a tested foundation; live SFU validation, browser session wiring, and persistent contact API routes remain intentionally staged.
 
 Start with:
 
@@ -22,6 +22,8 @@ Start with:
 - [Phase 3 report](docs/phase-3-report.md)
 - [Phase 4 report](docs/phase-4-report.md)
 - [Phase 5 report](docs/phase-5-report.md)
+- [Phase 6 report](docs/phase-6-report.md)
+- [Local LiveKit/Coturn environment](infrastructure/livekit/README.md)
 
 ## Development
 
@@ -52,7 +54,7 @@ The local Matrix homeserver is available at `http://127.0.0.1:8008` after the Ma
 
 ## Current boundary
 
-Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. Phase 4 adds the messaging workspace and Phase 5 adds the community-server/channel foundation and Matrix space mapping. Browser login/session wiring, authenticated contact/community APIs, live voice/SFU validation, QR rendering, encrypted media uploads, desktop, mobile, and production deployment remain future work.
+Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. Phase 4 adds the messaging workspace, Phase 5 adds the community-server/channel foundation and Matrix space mapping, and Phase 6 adds the LiveKit/Coturn voice boundary. Browser login/session wiring, authenticated contact/community/voice-token APIs, live three-user/TURN validation, QR rendering, encrypted media uploads, desktop, mobile, and production deployment remain future work.
 
 ## Important terminology
 

@@ -19,6 +19,7 @@ import {
   type ReplyReference,
 } from './messaging.js';
 import { DEMO_COMMUNITY, channelsForCategory } from './community.js';
+import { VoicePreviewPanel } from './voice-preview.js';
 
 interface AppProps {
   repository?: MessagingRepository;
@@ -553,42 +554,50 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
             aria-live="polite"
             aria-label="Message timeline"
           >
-            {isLoading ? <p className="timeline-state">Loading messages…</p> : null}
-            {!isLoading && filteredMessages.length === 0 ? (
-              <p className="timeline-state">No messages match this search.</p>
-            ) : null}
-            {!isLoading && filteredMessages.length > 0 ? (
-              <div className="date-divider">
-                <span>Today</span>
-              </div>
-            ) : null}
-            {filteredMessages.map((message) => (
-              <MessageRow
-                key={message.id}
-                message={message}
-                onDelete={(nextMessage) => void handleDelete(nextMessage)}
-                onEdit={handleEdit}
-                onReact={(nextMessage, emoji) => void handleReact(nextMessage, emoji)}
-                onReply={(nextMessage) =>
-                  setReplyTo({
-                    id: nextMessage.id,
-                    author: nextMessage.senderName,
-                    body: nextMessage.body,
-                  })
-                }
-                onRetry={(nextMessage) => void handleRetry(nextMessage)}
+            {selectedConversation?.channelKind === 'voice' ? (
+              <VoicePreviewPanel
+                roomName={selectedConversation.voiceRoomId ?? selectedConversation.id}
               />
-            ))}
-            <div className="typing-indicator" aria-live="polite">
-              {composer.trim() && !editingMessage ? (
-                <>
-                  <span className="typing-dots" aria-hidden="true">
-                    •••
-                  </span>{' '}
-                  You’re typing a reply
-                </>
-              ) : null}
-            </div>
+            ) : (
+              <>
+                {isLoading ? <p className="timeline-state">Loading messages…</p> : null}
+                {!isLoading && filteredMessages.length === 0 ? (
+                  <p className="timeline-state">No messages match this search.</p>
+                ) : null}
+                {!isLoading && filteredMessages.length > 0 ? (
+                  <div className="date-divider">
+                    <span>Today</span>
+                  </div>
+                ) : null}
+                {filteredMessages.map((message) => (
+                  <MessageRow
+                    key={message.id}
+                    message={message}
+                    onDelete={(nextMessage) => void handleDelete(nextMessage)}
+                    onEdit={handleEdit}
+                    onReact={(nextMessage, emoji) => void handleReact(nextMessage, emoji)}
+                    onReply={(nextMessage) =>
+                      setReplyTo({
+                        id: nextMessage.id,
+                        author: nextMessage.senderName,
+                        body: nextMessage.body,
+                      })
+                    }
+                    onRetry={(nextMessage) => void handleRetry(nextMessage)}
+                  />
+                ))}
+                <div className="typing-indicator" aria-live="polite">
+                  {composer.trim() && !editingMessage ? (
+                    <>
+                      <span className="typing-dots" aria-hidden="true">
+                        •••
+                      </span>{' '}
+                      You’re typing a reply
+                    </>
+                  ) : null}
+                </div>
+              </>
+            )}
           </div>
 
           {notice ? (
@@ -600,100 +609,102 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
             </p>
           ) : null}
 
-          <form
-            className="composer-shell"
-            data-testid={E2E_SELECTORS.composer}
-            onSubmit={(event) => void handleSubmit(event)}
-          >
-            {editingMessage ? (
-              <div className="composer-context">
-                <span>
-                  <strong>Editing message</strong> · changes are saved to this conversation
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingMessage(undefined);
-                    setComposer('');
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : null}
-            {replyTo ? (
-              <div className="composer-context">
-                <span>
-                  <strong>Replying to {replyTo.author}</strong> · {replyTo.body}
-                </span>
-                <button type="button" onClick={() => setReplyTo(undefined)}>
-                  Cancel
-                </button>
-              </div>
-            ) : null}
-            {attachments.length > 0 ? (
-              <div className="attachment-draft-list" aria-label="Attachments ready to send">
-                {attachments.map((attachment) => (
-                  <span className="attachment-chip" key={attachment.id}>
-                    {attachment.name} <small>{formatFileSize(attachment.size)}</small>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setAttachments((current) =>
-                          current.filter(({ id }) => id !== attachment.id),
-                        )
-                      }
-                      aria-label={`Remove ${attachment.name}`}
-                    >
-                      ×
-                    </button>
+          {selectedConversation?.channelKind === 'voice' ? null : (
+            <form
+              className="composer-shell"
+              data-testid={E2E_SELECTORS.composer}
+              onSubmit={(event) => void handleSubmit(event)}
+            >
+              {editingMessage ? (
+                <div className="composer-context">
+                  <span>
+                    <strong>Editing message</strong> · changes are saved to this conversation
                   </span>
-                ))}
-              </div>
-            ) : null}
-            <div className="composer-input-row">
-              <label className="visually-hidden" htmlFor="message-composer-input">
-                Write a message
-              </label>
-              <textarea
-                id="message-composer-input"
-                value={composer}
-                onChange={(event) => setComposer(event.target.value)}
-                onKeyDown={handleComposerKeyDown}
-                placeholder={
-                  selectedConversation
-                    ? `Message ${selectedConversation.title}`
-                    : 'Choose a conversation'
-                }
-                rows={1}
-                disabled={!selectedConversationId || isLoading}
-              />
-              <button
-                type="submit"
-                className="send-button"
-                data-testid={E2E_SELECTORS.sendMessage}
-                disabled={isSending || (!composer.trim() && attachments.length === 0)}
-              >
-                {isSending ? '…' : 'Send'}
-              </button>
-            </div>
-            <div className="composer-footer">
-              <div className="composer-tools">
-                <label className="tool-button" title="Attach files">
-                  <span aria-hidden="true">＋</span>
-                  <span className="visually-hidden">Attach files</span>
-                  <input type="file" multiple onChange={handleFiles} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMessage(undefined);
+                      setComposer('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              {replyTo ? (
+                <div className="composer-context">
+                  <span>
+                    <strong>Replying to {replyTo.author}</strong> · {replyTo.body}
+                  </span>
+                  <button type="button" onClick={() => setReplyTo(undefined)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              {attachments.length > 0 ? (
+                <div className="attachment-draft-list" aria-label="Attachments ready to send">
+                  {attachments.map((attachment) => (
+                    <span className="attachment-chip" key={attachment.id}>
+                      {attachment.name} <small>{formatFileSize(attachment.size)}</small>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttachments((current) =>
+                            current.filter(({ id }) => id !== attachment.id),
+                          )
+                        }
+                        aria-label={`Remove ${attachment.name}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="composer-input-row">
+                <label className="visually-hidden" htmlFor="message-composer-input">
+                  Write a message
                 </label>
-                <button type="button" className="tool-button" aria-label="Add emoji">
-                  ☺
-                </button>
-                <button type="button" className="tool-button" aria-label="Record voice message">
-                  ◉
+                <textarea
+                  id="message-composer-input"
+                  value={composer}
+                  onChange={(event) => setComposer(event.target.value)}
+                  onKeyDown={handleComposerKeyDown}
+                  placeholder={
+                    selectedConversation
+                      ? `Message ${selectedConversation.title}`
+                      : 'Choose a conversation'
+                  }
+                  rows={1}
+                  disabled={!selectedConversationId || isLoading}
+                />
+                <button
+                  type="submit"
+                  className="send-button"
+                  data-testid={E2E_SELECTORS.sendMessage}
+                  disabled={isSending || (!composer.trim() && attachments.length === 0)}
+                >
+                  {isSending ? '…' : 'Send'}
                 </button>
               </div>
-              <span className="composer-hint">Enter to send · Shift + Enter for a new line</span>
-            </div>
-          </form>
+              <div className="composer-footer">
+                <div className="composer-tools">
+                  <label className="tool-button" title="Attach files">
+                    <span aria-hidden="true">＋</span>
+                    <span className="visually-hidden">Attach files</span>
+                    <input type="file" multiple onChange={handleFiles} />
+                  </label>
+                  <button type="button" className="tool-button" aria-label="Add emoji">
+                    ☺
+                  </button>
+                  <button type="button" className="tool-button" aria-label="Record voice message">
+                    ◉
+                  </button>
+                </div>
+                <span className="composer-hint">Enter to send · Shift + Enter for a new line</span>
+              </div>
+            </form>
+          )}
         </section>
 
         <aside className="details-sidebar" aria-label="Conversation details">

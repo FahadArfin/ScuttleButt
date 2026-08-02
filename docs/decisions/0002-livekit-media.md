@@ -1,6 +1,6 @@
 # ADR-0002: LiveKit and MatrixRTC for realtime media
 
-- Status: Accepted for implementation, subject to Phase 6 proof of concept
+- Status: Accepted; Phase 6 client/infrastructure foundation implemented, live proof-of-concept validation pending
 - Date: 2026-08-02
 
 ## Context
