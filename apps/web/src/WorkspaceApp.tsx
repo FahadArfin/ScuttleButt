@@ -205,6 +205,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(!googleCredential);
+  const [cloudWorkspaceExists, setCloudWorkspaceExists] = useState(false);
   const members = useMemo<WorkspaceMember[]>(
     () => [
       {
@@ -250,6 +251,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         if (workspace) {
           setGroups(workspace.groups);
           setCustomDms(workspace.dms);
+          setCloudWorkspaceExists(true);
         }
         setWorkspaceReady(true);
       })
@@ -294,6 +296,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     window.localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(groups));
     window.localStorage.setItem(DM_STORAGE_KEY, JSON.stringify(customDms));
     if (googleCredential) {
+      if (!cloudWorkspaceExists && groups.length === 0 && customDms.length === 0) return undefined;
       const persistedGroups = groups.map((group) => ({
         ...group,
         channels: group.channels.map((channel) => ({ ...channel, participantIds: [] })),
@@ -302,14 +305,16 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         void saveSyncedWorkspace(googleCredential, {
           groups: persistedGroups,
           dms: customDms,
-        }).catch(() =>
-          setNotice({ tone: 'error', text: 'Workspace changes could not be synchronized.' }),
-        );
+        })
+          .then(() => setCloudWorkspaceExists(true))
+          .catch(() =>
+            setNotice({ tone: 'error', text: 'Workspace changes could not be synchronized.' }),
+          );
       }, 250);
       return () => window.clearTimeout(timeout);
     }
     return undefined;
-  }, [customDms, googleCredential, groups, workspaceReady]);
+  }, [cloudWorkspaceExists, customDms, googleCredential, groups, workspaceReady]);
 
   useEffect(() => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
