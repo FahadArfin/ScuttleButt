@@ -11,6 +11,22 @@ export interface WorkspaceMember {
   status: 'away' | 'offline' | 'online';
 }
 
+export interface CustomSound {
+  dataUrl: string;
+  id: string;
+  name: string;
+  sourceGroupId: string;
+  sourceGroupName: string;
+}
+
+export interface CustomEmote {
+  dataUrl: string;
+  id: string;
+  name: string;
+  sourceGroupId: string;
+  sourceGroupName: string;
+}
+
 export interface WorkspaceChannel {
   conversationId: string;
   id: string;
@@ -22,9 +38,12 @@ export interface WorkspaceChannel {
 export interface WorkspaceGroup {
   channels: WorkspaceChannel[];
   description: string;
+  emotes?: CustomEmote[];
   icon: 'chat' | 'garden' | 'orbit' | 'summit';
   id: string;
+  members?: WorkspaceMember[];
   name: string;
+  sounds?: CustomSound[];
 }
 
 export const GROUP_STORAGE_KEY = 'scuttlebutt:workspace-groups:v3';

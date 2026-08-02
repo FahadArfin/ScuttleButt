@@ -63,8 +63,13 @@ interface FriendResponseBody extends GoogleCredentialBody {
   requesterId: string;
 }
 
+interface GroupInviteBody extends GoogleCredentialBody {
+  friendId: string;
+  group: Record<string, unknown>;
+}
+
 export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 });
   const google = options.googleClientId ? new OAuth2Client(options.googleClientId) : undefined;
   const database = options.databaseUrl ? new ScuttlebuttDatabase(options.databaseUrl) : undefined;
   const authenticate = async (credential: string): Promise<string> => {
@@ -204,6 +209,13 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
     }
     await database!.respondToFriendRequest(userId, request.body.requesterId, request.body.action);
     return { saved: true };
+  });
+
+  app.post<{ Body: GroupInviteBody }>('/api/groups/invite', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    return {
+      group: await database!.inviteFriendToGroup(userId, request.body.friendId, request.body.group),
+    };
   });
 
   app.post<{ Body: GoogleCredentialBody }>('/api/sync/workspace/load', async (request) => {

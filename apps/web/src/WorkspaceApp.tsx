@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import {
+  ArrowLeft,
   Bell,
   Camera,
   CaretDown,
@@ -55,6 +56,7 @@ import {
   sendFriendRequest,
   type FriendState,
 } from './friends.js';
+import { inviteFriendToGroup } from './groups.js';
 import {
   createDemoMessagingRepository,
   createSyncedMessagingRepository,
@@ -79,6 +81,8 @@ import {
   loadStoredGroups,
   slugify,
   type AppSurface,
+  type CustomEmote,
+  type CustomSound,
   type DialogMode,
   type WorkspaceChannel,
   type WorkspaceGroup,
@@ -205,6 +209,9 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
   const [friendDialogOpen, setFriendDialogOpen] = useState(false);
+  const [groupInviteOpen, setGroupInviteOpen] = useState(false);
+  const [assetDialog, setAssetDialog] = useState<'emote' | 'sound'>();
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [friendState, setFriendState] = useState<FriendState>({
     friendCode: user.friendCode ?? loadFriendCode(),
     friends: [],
@@ -216,25 +223,31 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(!googleCredential);
   const [cloudWorkspaceExists, setCloudWorkspaceExists] = useState(false);
-  const members = useMemo<WorkspaceMember[]>(
-    () => [
-      {
-        id: user.id,
-        avatar: profile.avatar,
-        name: profile.displayName,
-        note: 'You',
-        status: 'online',
-      },
-    ],
-    [profile.avatar, profile.displayName, user.id],
-  );
-
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
   const directMessages = conversations.filter(
     ({ id, kind }) => kind === 'direct' && !id.startsWith('friend-'),
   );
   const friendCode = friendState.friendCode;
   const activeGroup = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
+  const members = useMemo<WorkspaceMember[]>(
+    () => {
+      const localMember: WorkspaceMember =
+      {
+        id: user.id,
+        avatar: profile.avatar,
+        name: profile.displayName,
+        note: 'You',
+        status: 'online',
+      };
+      return [
+        localMember,
+        ...(activeGroup?.members ?? []).filter(({ id }) => id !== user.id),
+      ];
+    },
+    [activeGroup?.members, profile.avatar, profile.displayName, user.id],
+  );
+  const availableSounds = useMemo(() => groups.flatMap(({ sounds = [] }) => sounds), [groups]);
+  const availableEmotes = useMemo(() => groups.flatMap(({ emotes = [] }) => emotes), [groups]);
   const joinedVoice = groups
     .flatMap((group) =>
       group.channels.map((channel) => ({ channel, group })),
@@ -282,10 +295,20 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     if (!googleCredential) return;
     let mounted = true;
     const refresh = () => {
-      void loadFriendState(googleCredential)
-        .then((state) => {
+      void Promise.all([
+        loadFriendState(googleCredential),
+        loadSyncedWorkspace<{ dms: Conversation[]; groups: WorkspaceGroup[] }>(googleCredential),
+      ])
+        .then(([state, workspace]) => {
           if (!mounted) return;
           setFriendState(state);
+          if (workspace) {
+            setGroups((current) =>
+              JSON.stringify(current) === JSON.stringify(workspace.groups)
+                ? current
+                : workspace.groups,
+            );
+          }
           void repository.getConversations().then(setConversations);
         })
         .catch(() => undefined);
@@ -416,6 +439,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     setActiveSurface(surface);
     setSearch('');
     setNotice(undefined);
+    setMobileNavigationOpen(false);
   };
 
   const openGroup = (groupId: string) => {
@@ -432,7 +456,8 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const openDms = () => {
     setActiveSurface('dms');
     setWorkspaceMenuOpen(false);
-    setSelectedConversationId(directMessages[0]?.id ?? '');
+    setSelectedConversationId('');
+    setMobileNavigationOpen(true);
     setNotice(undefined);
   };
 
@@ -690,11 +715,79 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     }
   };
 
+  const handleGroupInvite = async (friendId: string) => {
+    if (!googleCredential || !activeGroup) return;
+    const friend = friendState.friends.find(({ id }) => id === friendId);
+    if (!friend) return;
+    try {
+      const groupWithMember: WorkspaceGroup = {
+        ...activeGroup,
+        members: [
+          ...(activeGroup.members ?? []).filter(({ id }) => id !== friend.id),
+          {
+            avatar: friend.avatarUrl ?? '',
+            id: friend.id,
+            name: friend.name,
+            note: 'Member',
+            status: 'online',
+          },
+        ],
+      };
+      const savedGroup = await inviteFriendToGroup(googleCredential, friendId, groupWithMember);
+      setGroups((current) =>
+        current.map((group) => (group.id === savedGroup.id ? savedGroup : group)),
+      );
+      setGroupInviteOpen(false);
+      setNotice({ tone: 'info', text: `${friend.name} was invited to ${activeGroup.name}.` });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'The group invitation failed.',
+      });
+    }
+  };
+
+  const addGroupAsset = (type: 'emote' | 'sound', name: string, dataUrl: string) => {
+    if (!activeGroup) return;
+    const safeName = name.trim().replace(/[^a-z0-9_-]/gi, '').slice(0, 24);
+    if (!safeName) return;
+    setGroups((current) =>
+      current.map((group) => {
+        if (group.id !== activeGroup.id) return group;
+        if (type === 'sound') {
+          const sound: CustomSound = {
+            dataUrl,
+            id: crypto.randomUUID(),
+            name: safeName,
+            sourceGroupId: group.id,
+            sourceGroupName: group.name,
+          };
+          return { ...group, sounds: [...(group.sounds ?? []), sound] };
+        }
+        const emote: CustomEmote = {
+          dataUrl,
+          id: crypto.randomUUID(),
+          name: safeName,
+          sourceGroupId: group.id,
+          sourceGroupName: group.name,
+        };
+        return { ...group, emotes: [...(group.emotes ?? []), emote] };
+      }),
+    );
+    setAssetDialog(undefined);
+    setNotice({
+      tone: 'info',
+      text: `${safeName} was added to ${activeGroup.name}'s ${type === 'sound' ? 'soundboard' : 'emotes'}.`,
+    });
+  };
+
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
 
   return (
     <main className="app-shell" data-testid={E2E_SELECTORS.appShell}>
-      <section className={`app-window ${showMembers ? '' : 'members-collapsed'}`}>
+      <section
+        className={`app-window ${showMembers ? '' : 'members-collapsed'} ${mobileNavigationOpen ? 'mobile-navigation-open' : 'mobile-conversation-open'}`}
+      >
         <ServerRail
           activeGroupId={activeGroupId}
           activeSurface={activeSurface}
@@ -732,13 +825,31 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                   Create group
                 </button>
                 {activeSurface === 'groups' ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => setDialogMode('text-channel')}
-                  >
-                    Create channel
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setGroupInviteOpen(true);
+                      }}
+                    >
+                      Invite friends
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => setDialogMode('text-channel')}
+                    >
+                      Create channel
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setAssetDialog('sound'); }}>
+                      Add soundboard sound
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setAssetDialog('emote'); }}>
+                      Add custom emote
+                    </button>
+                  </>
                 ) : null}
                 <button
                   type="button"
@@ -773,6 +884,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 onHome={() => {
                   setActiveSurface('dms');
                   setSelectedConversationId('');
+                  setMobileNavigationOpen(false);
                 }}
                 onSelect={(id) => selectConversation(id, 'dms')}
                 onThreads={() => {
@@ -903,6 +1015,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 notificationsEnabled={notificationsEnabled}
                 search={search}
                 selectedConversation={selectedConversation}
+                onBack={() => setMobileNavigationOpen(true)}
                 onMembersToggle={() => setMembersVisible((visible) => !visible)}
                 onNotificationsToggle={() => setNotificationsEnabled((enabled) => !enabled)}
                 onPinned={() =>
@@ -940,6 +1053,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                             }))}
                           onConnectionChange={updateVoiceConnection}
                           onSpeakingChange={setLocalSpeaking}
+                          sounds={availableSounds}
                         />
                       </div>
                     </div>
@@ -949,6 +1063,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                       editingMessage={editingMessage}
                       isLoading={isLoading}
                       messages={filteredMessages}
+                      emotes={availableEmotes}
                       ownAvatar={profile.avatar}
                       onDelete={(message) => void handleDelete(message)}
                       onEdit={(message) => {
@@ -991,6 +1106,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                     isLoading={isLoading}
                     isSending={isSending}
                     replyTo={replyTo}
+                    emotes={availableEmotes}
                     onCancelContext={() => {
                       setEditingMessage(undefined);
                       setReplyTo(undefined);
@@ -1032,6 +1148,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               attachments={attachments}
               composer={composer}
               editingMessage={editingMessage}
+              emotes={availableEmotes}
               isLoading={isLoading}
               isSending={isSending}
               messages={filteredMessages}
@@ -1080,7 +1197,11 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             />
           )
         ) : showMembers ? (
-          <MembersSidebar members={members} onNotice={setNotice} />
+          <MembersSidebar
+            members={members}
+            onInvite={() => setGroupInviteOpen(true)}
+            onNotice={setNotice}
+          />
         ) : null}
       </section>
 
@@ -1108,6 +1229,22 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             setProfileDialogOpen(false);
             setNotice({ tone: 'info', text: 'Profile updated on this device.' });
           }}
+        />
+      ) : null}
+      {groupInviteOpen && activeGroup ? (
+        <GroupInviteDialog
+          friends={friendState.friends}
+          group={activeGroup}
+          onCancel={() => setGroupInviteOpen(false)}
+          onInvite={(friendId) => void handleGroupInvite(friendId)}
+        />
+      ) : null}
+      {assetDialog && activeGroup ? (
+        <GroupAssetDialog
+          groupName={activeGroup.name}
+          type={assetDialog}
+          onCancel={() => setAssetDialog(undefined)}
+          onSave={addGroupAsset}
         />
       ) : null}
     </main>
@@ -1456,6 +1593,7 @@ function ConversationHeader({
   memberCount,
   membersVisible,
   notificationsEnabled,
+  onBack,
   onMembersToggle,
   onNotificationsToggle,
   onPinned,
@@ -1470,6 +1608,7 @@ function ConversationHeader({
   memberCount: number;
   membersVisible: boolean;
   notificationsEnabled: boolean;
+  onBack: () => void;
   onMembersToggle: () => void;
   onNotificationsToggle: () => void;
   onPinned: () => void;
@@ -1482,6 +1621,14 @@ function ConversationHeader({
   return (
     <header className="conversation-header">
       <div className="conversation-header-title">
+        <button
+          type="button"
+          className="mobile-conversation-back"
+          aria-label="Back to conversations"
+          onClick={onBack}
+        >
+          <ArrowLeft size={22} weight="bold" />
+        </button>
         {selectedConversation.kind === 'direct' ? (
           <PersonAvatar
             image={selectedConversation.avatarUrl}
@@ -1558,6 +1705,7 @@ function ConversationHeader({
 function MessageList({
   composer,
   editingMessage,
+  emotes,
   isLoading,
   messages,
   ownAvatar,
@@ -1569,6 +1717,7 @@ function MessageList({
 }: {
   composer: string;
   editingMessage?: Message;
+  emotes: CustomEmote[];
   isLoading: boolean;
   messages: Message[];
   ownAvatar: string;
@@ -1592,6 +1741,7 @@ function MessageList({
       {messages.map((message) => (
         <MessageRow
           avatar={ownAvatar}
+          emotes={emotes}
           key={message.id}
           message={message}
           onDelete={onDelete}
@@ -1617,6 +1767,7 @@ function Composer({
   attachments,
   composer,
   editingMessage,
+  emotes,
   isLoading,
   isSending,
   onCancelContext,
@@ -1632,6 +1783,7 @@ function Composer({
   attachments: AttachmentDraft[];
   composer: string;
   editingMessage?: Message;
+  emotes: CustomEmote[];
   isLoading: boolean;
   isSending: boolean;
   onCancelContext: () => void;
@@ -1643,6 +1795,7 @@ function Composer({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   replyTo?: ReplyReference;
 }) {
+  const [emotePickerOpen, setEmotePickerOpen] = useState(false);
   return (
     <form className="composer-shell" data-testid={E2E_SELECTORS.composer} onSubmit={onSubmit}>
       {editingMessage || replyTo ? (
@@ -1722,14 +1875,52 @@ function Composer({
           </label>
         </div>
         <div className="composer-submit-group">
-          <button
-            type="button"
-            className="composer-tool"
-            aria-label="Add emoji"
-            onClick={() => onInsert('✨')}
-          >
-            <Smiley size={19} />
-          </button>
+          <div className="composer-emote-wrap">
+            <button
+              type="button"
+              className="composer-tool"
+              aria-label="Add emoji or custom emote"
+              aria-expanded={emotePickerOpen}
+              onClick={() => setEmotePickerOpen((open) => !open)}
+            >
+              <Smiley size={19} />
+            </button>
+            {emotePickerOpen ? (
+              <div className="emote-picker" role="dialog" aria-label="Emoji and custom emotes">
+                <strong>Emoji</strong>
+                <div className="emote-grid">
+                  {['✨', '❤️', '👍', '😂', '🎮', '🐸'].map((emoji) => (
+                    <button
+                      type="button"
+                      key={emoji}
+                      onClick={() => {
+                        onInsert(emoji);
+                        setEmotePickerOpen(false);
+                      }}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+                {emotes.length > 0 ? <strong>From your servers</strong> : null}
+                <div className="emote-grid">
+                  {emotes.map((emote) => (
+                    <button
+                      type="button"
+                      key={emote.id}
+                      title={`:${emote.name}: · ${emote.sourceGroupName}`}
+                      onClick={() => {
+                        onInsert(`:${emote.name}:`);
+                        setEmotePickerOpen(false);
+                      }}
+                    >
+                      <img src={emote.dataUrl} alt={emote.name} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button
             type="submit"
             className="send-button"
@@ -2118,6 +2309,7 @@ function VoiceChatSidebar({
   attachments,
   composer,
   editingMessage,
+  emotes,
   isLoading,
   isSending,
   messages,
@@ -2141,6 +2333,7 @@ function VoiceChatSidebar({
   attachments: AttachmentDraft[];
   composer: string;
   editingMessage?: Message;
+  emotes: CustomEmote[];
   isLoading: boolean;
   isSending: boolean;
   messages: Message[];
@@ -2176,6 +2369,7 @@ function VoiceChatSidebar({
         <MessageList
           composer={composer}
           editingMessage={editingMessage}
+          emotes={emotes}
           isLoading={isLoading}
           messages={messages}
           ownAvatar={ownAvatar}
@@ -2191,6 +2385,7 @@ function VoiceChatSidebar({
         attachments={attachments}
         composer={composer}
         editingMessage={editingMessage}
+        emotes={emotes}
         isLoading={isLoading}
         isSending={isSending}
         replyTo={replyTo}
@@ -2276,9 +2471,11 @@ function FriendCodeDialog({
 
 function MembersSidebar({
   members,
+  onInvite,
   onNotice,
 }: {
   members: WorkspaceMember[];
+  onInvite: () => void;
   onNotice: (notice: Notice) => void;
 }) {
   return (
@@ -2317,11 +2514,115 @@ function MembersSidebar({
       <button
         type="button"
         className="invite-button"
-        onClick={() => onNotice({ tone: 'info', text: 'A local invite link is ready to copy.' })}
+        onClick={onInvite}
       >
         <Users size={17} /> Invite members
       </button>
     </aside>
+  );
+}
+
+function GroupInviteDialog({
+  friends,
+  group,
+  onCancel,
+  onInvite,
+}: {
+  friends: FriendState['friends'];
+  group: WorkspaceGroup;
+  onCancel: () => void;
+  onInvite: (friendId: string) => void;
+}) {
+  const memberIds = new Set((group.members ?? []).map(({ id }) => id));
+  const available = friends.filter(({ id }) => !memberIds.has(id));
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <section
+        className="creation-dialog group-invite-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-invite-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="creation-dialog-heading">
+          <div>
+            <p className="section-kicker">{group.name}</p>
+            <h2 id="group-invite-title">Invite friends</h2>
+          </div>
+          <button type="button" aria-label="Close invite dialog" onClick={onCancel}><X size={18} /></button>
+        </div>
+        <p>Invited friends receive access to this server’s text and voice channels.</p>
+        <div className="group-invite-list">
+          {available.map((friend) => (
+            <div className="group-invite-row" key={friend.id}>
+              <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
+              <span><strong>{friend.name}</strong><small>Friend</small></span>
+              <button type="button" onClick={() => onInvite(friend.id)}>Invite</button>
+            </div>
+          ))}
+          {available.length === 0 ? <p>No additional friends are available to invite.</p> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function GroupAssetDialog({
+  groupName,
+  onCancel,
+  onSave,
+  type,
+}: {
+  groupName: string;
+  onCancel: () => void;
+  onSave: (type: 'emote' | 'sound', name: string, dataUrl: string) => void;
+  type: 'emote' | 'sound';
+}) {
+  const [name, setName] = useState('');
+  const [dataUrl, setDataUrl] = useState('');
+  const [error, setError] = useState('');
+  const maxBytes = type === 'sound' ? 1_500_000 : 512_000;
+  const accept = type === 'sound' ? 'audio/mpeg,audio/wav,audio/ogg,audio/webm' : 'image/png,image/jpeg,image/gif,image/webp';
+  const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (file.size > maxBytes || !file.type.startsWith(type === 'sound' ? 'audio/' : 'image/')) {
+      setError(`${type === 'sound' ? 'Sound' : 'Emote'} must be under ${type === 'sound' ? '1.5 MB' : '512 KB'}.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      setDataUrl(String(reader.result));
+      setName((current) => current || file.name.replace(/\.[^.]+$/, ''));
+      setError('');
+    });
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <form
+        className="creation-dialog group-asset-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-asset-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim() && dataUrl) onSave(type, name, dataUrl);
+        }}
+      >
+        <div className="creation-dialog-heading">
+          <div><p className="section-kicker">{groupName}</p><h2 id="group-asset-title">Add custom {type}</h2></div>
+          <button type="button" aria-label="Close asset dialog" onClick={onCancel}><X size={18} /></button>
+        </div>
+        <label><span>Name</span><input value={name} maxLength={24} onChange={(event) => setName(event.target.value)} placeholder={type === 'sound' ? 'airhorn' : 'pepewave'} /></label>
+        <label className="asset-file-field"><span>{type === 'sound' ? 'Audio file' : 'Emote image'}</span><input type="file" accept={accept} onChange={chooseFile} /></label>
+        {dataUrl && type === 'emote' ? <img className="asset-emote-preview" src={dataUrl} alt="Emote preview" /> : null}
+        {dataUrl && type === 'sound' ? <audio controls src={dataUrl} /> : null}
+        {error ? <p className="auth-error" role="alert">{error}</p> : null}
+        <div className="creation-dialog-actions"><button type="button" onClick={onCancel}>Cancel</button><button type="submit" disabled={!name.trim() || !dataUrl}>Add to server</button></div>
+      </form>
+    </div>
   );
 }
 

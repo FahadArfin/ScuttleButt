@@ -146,6 +146,19 @@ export class ScuttlebuttDatabase {
         dms jsonb NOT NULL DEFAULT '[]',
         updated_at timestamptz NOT NULL DEFAULT now()
       );
+      CREATE TABLE IF NOT EXISTS synced_groups (
+        id text PRIMARY KEY,
+        owner_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        group_data jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS synced_group_members (
+        group_id text NOT NULL REFERENCES synced_groups(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role text NOT NULL DEFAULT 'member',
+        joined_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (group_id, user_id)
+      );
       CREATE TABLE IF NOT EXISTS synced_conversations (
         id text PRIMARY KEY,
         conversation jsonb NOT NULL,
@@ -398,11 +411,24 @@ export class ScuttlebuttDatabase {
   }
 
   async getWorkspace(userId: string): Promise<SyncedWorkspace | null> {
-    const result = await this.pool.query<{ dms: unknown[]; groups: unknown[] }>(
+    const [result, shared] = await Promise.all([
+      this.pool.query<{ dms: unknown[]; groups: Record<string, unknown>[] }>(
       'SELECT groups, dms FROM user_workspace_state WHERE user_id = $1',
       [userId],
-    );
-    return result.rows[0] ?? null;
+      ),
+      this.pool.query<{ group_data: Record<string, unknown> }>(
+        `SELECT sg.group_data FROM synced_groups sg
+         JOIN synced_group_members sgm ON sgm.group_id = sg.id
+         WHERE sgm.user_id = $1 ORDER BY sg.updated_at`,
+        [userId],
+      ),
+    ]);
+    const local = result.rows[0];
+    if (!local && shared.rows.length === 0) return null;
+    const groups = new Map<string, Record<string, unknown>>();
+    for (const group of local?.groups ?? []) groups.set(String(group.id), group);
+    for (const { group_data: group } of shared.rows) groups.set(String(group.id), group);
+    return { dms: local?.dms ?? [], groups: [...groups.values()] };
   }
 
   async saveWorkspace(userId: string, workspace: SyncedWorkspace): Promise<void> {
@@ -413,6 +439,114 @@ export class ScuttlebuttDatabase {
          groups = EXCLUDED.groups, dms = EXCLUDED.dms, updated_at = now()`,
       [userId, JSON.stringify(workspace.groups), JSON.stringify(workspace.dms)],
     );
+    for (const value of workspace.groups) {
+      const group = value as { id?: unknown };
+      if (typeof group.id !== 'string' || !group.id) continue;
+      await this.pool.query(
+        `INSERT INTO synced_groups (id, owner_id, group_data) VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (id) DO UPDATE SET group_data = EXCLUDED.group_data, updated_at = now()`,
+        [group.id, userId, JSON.stringify(value)],
+      );
+      await this.pool.query(
+        `INSERT INTO synced_group_members (group_id, user_id, role) VALUES ($1, $2, 'owner')
+         ON CONFLICT DO NOTHING`,
+        [group.id, userId],
+      );
+    }
+  }
+
+  async inviteFriendToGroup(
+    userId: string,
+    friendId: string,
+    group: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (typeof group.id !== 'string' || !group.id || typeof group.name !== 'string') {
+      throw Object.assign(new Error('Group details are invalid.'), { statusCode: 400 });
+    }
+    const friendship = await this.pool.query(
+      `SELECT 1 FROM friendships WHERE status = 'accepted' AND
+       ((requester_id = $1 AND recipient_id = $2) OR (requester_id = $2 AND recipient_id = $1))`,
+      [userId, friendId],
+    );
+    if (!friendship.rowCount) {
+      throw Object.assign(new Error('Only accepted friends can be invited.'), { statusCode: 403 });
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO synced_groups (id, owner_id, group_data) VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (id) DO UPDATE SET group_data = EXCLUDED.group_data, updated_at = now()`,
+        [group.id, userId, JSON.stringify(group)],
+      );
+      await client.query(
+        `INSERT INTO synced_group_members (group_id, user_id, role)
+         VALUES ($1, $2, 'owner'), ($1, $3, 'member') ON CONFLICT DO NOTHING`,
+        [group.id, userId, friendId],
+      );
+      const profiles = await client.query<FriendProfile>(
+        `SELECT u.id, u.display_name AS name, u.avatar_url AS "avatarUrl",
+          u.profile_bio AS bio, u.profile_tags AS tags
+         FROM synced_group_members gm JOIN users u ON u.id = gm.user_id
+         WHERE gm.group_id = $1 ORDER BY u.display_name`,
+        [group.id],
+      );
+      const nextGroup = {
+        ...group,
+        members: profiles.rows.map((profile) => ({
+          avatar: profile.avatarUrl ?? '',
+          id: profile.id,
+          name: profile.name,
+          note: 'Member',
+          status: 'online',
+        })),
+      };
+      await client.query('UPDATE synced_groups SET group_data = $2::jsonb, updated_at = now() WHERE id = $1', [
+        group.id,
+        JSON.stringify(nextGroup),
+      ]);
+      const channels = Array.isArray(group.channels) ? group.channels : [];
+      for (const value of channels) {
+        const channel = value as { conversationId?: unknown; kind?: unknown; name?: unknown; participantIds?: unknown[] };
+        if (typeof channel.conversationId !== 'string' || typeof channel.name !== 'string') continue;
+        const isVoice = channel.kind === 'voice';
+        const conversation = {
+          id: channel.conversationId,
+          title: channel.name,
+          kind: 'channel',
+          avatarLabel: isVoice ? 'VC' : '#',
+          presence: isVoice ? 'Voice room' : `${group.name} text channel`,
+          preview: isVoice ? 'Meeting chat and voice room.' : 'Start the conversation.',
+          updatedAt: 'Now',
+          unreadCount: 0,
+          encrypted: true,
+          members: profiles.rows.length,
+          categoryId: group.id,
+          categoryName: group.name,
+          channelKind: isVoice ? 'voice' : 'text',
+          voiceRoomId: isVoice ? channel.conversationId : undefined,
+        };
+        await client.query(
+          `INSERT INTO synced_conversations (id, conversation) VALUES ($1, $2::jsonb)
+           ON CONFLICT (id) DO UPDATE SET conversation = EXCLUDED.conversation, updated_at = now()`,
+          [channel.conversationId, JSON.stringify(conversation)],
+        );
+        for (const member of profiles.rows) {
+          await client.query(
+            `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
+             VALUES ($1, $2, $3::jsonb) ON CONFLICT DO NOTHING`,
+            [channel.conversationId, member.id, JSON.stringify(conversation)],
+          );
+        }
+      }
+      await client.query('COMMIT');
+      return nextGroup;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async upsertConversation(userId: string, conversation: { id: string }): Promise<unknown> {

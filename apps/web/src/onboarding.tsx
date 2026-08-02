@@ -96,7 +96,17 @@ export function OnboardingPage({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ credential, profile }),
         });
-        if (!response.ok) throw new Error('Your profile could not be saved. Please try again.');
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string;
+            message?: string;
+          };
+          throw new Error(
+            response.status === 413
+              ? 'That profile picture is too large. Choose an image under 2 MB.'
+              : payload.error ?? payload.message ?? 'Your profile could not be saved. Please try again.',
+          );
+        }
         nextUser = ((await response.json()) as { user: SignedInUser }).user;
       }
       const joinedGroups = RECOMMENDED_SERVERS.filter(({ group }) =>

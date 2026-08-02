@@ -23,6 +23,13 @@ export interface CallParticipant {
   name: string;
 }
 
+export interface SoundboardSound {
+  dataUrl: string;
+  id: string;
+  name: string;
+  sourceGroupName: string;
+}
+
 export type VoiceQuickAction = 'camera' | 'settings' | 'share' | 'soundboard';
 export const VOICE_QUICK_ACTION_EVENT = 'scuttlebutt:voice-quick-action';
 
@@ -72,6 +79,7 @@ export function VoicePreviewPanel({
   onSpeakingChange,
   participants = [],
   roomName,
+  sounds = [],
 }: {
   connected?: boolean;
   localUser: CallParticipant;
@@ -79,6 +87,7 @@ export function VoicePreviewPanel({
   onSpeakingChange?: (speaking: boolean) => void;
   participants?: CallParticipant[];
   roomName: string;
+  sounds?: SoundboardSound[];
 }) {
   const [muted, setMuted] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
@@ -291,6 +300,12 @@ export function VoicePreviewPanel({
     oscillator.stop(context.currentTime + 0.28);
   };
 
+  const playCustomSound = (sound: SoundboardSound) => {
+    const audio = new Audio(sound.dataUrl);
+    audio.volume = Math.min(1, voiceSettings.outputVolume / 100);
+    void audio.play().catch(() => setMediaError('This sound could not be played.'));
+  };
+
   useEffect(() => {
     const handleQuickAction = (event: Event) => {
       const action = (event as CustomEvent<VoiceQuickAction>).detail;
@@ -415,6 +430,17 @@ export function VoicePreviewPanel({
               <button type="button" onClick={() => playSound(784)}>
                 Celebrate
               </button>
+              {sounds.map((sound) => (
+                <button
+                  type="button"
+                  key={sound.id}
+                  title={`From ${sound.sourceGroupName}`}
+                  onClick={() => playCustomSound(sound)}
+                >
+                  {sound.name}
+                </button>
+              ))}
+              {sounds.length === 0 ? <small>Add sounds from the server menu.</small> : null}
             </div>
           ) : null}
         </div>

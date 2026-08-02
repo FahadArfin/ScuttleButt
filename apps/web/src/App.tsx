@@ -63,6 +63,12 @@ interface Notice {
   text: string;
 }
 
+interface RenderableEmote {
+  dataUrl: string;
+  id: string;
+  name: string;
+}
+
 interface Member {
   avatar: string;
   name: string;
@@ -82,8 +88,6 @@ const AVATARS = {
   sam: '/avatars/sam-lee.webp',
   taylor: '/avatars/taylor-nguyen.webp',
 };
-
-type AvatarKey = keyof typeof AVATARS;
 
 const TEXT_CHANNELS = [
   { conversationId: 'welcome', name: 'announcements' },
@@ -105,16 +109,7 @@ const MEMBERS: Member[] = [
 ];
 
 function avatarForMessage(message: Message): string {
-  const senderKey = message.senderId.toLowerCase();
-  if (senderKey in AVATARS) {
-    return AVATARS[senderKey as AvatarKey];
-  }
-  const name = message.senderName.toLowerCase();
-  if (name.includes('maya')) return AVATARS.maya;
-  if (name.includes('jordan')) return AVATARS.jordan;
-  if (name.includes('sam')) return AVATARS.sam;
-  if (name.includes('priya')) return AVATARS.priya;
-  if (name.includes('alex') || message.own) return AVATARS.alex;
+  void message;
   return '';
 }
 
@@ -177,6 +172,7 @@ export function PersonAvatar({
 
 export function MessageRow({
   avatar,
+  emotes = [],
   message,
   onDelete,
   onEdit,
@@ -185,6 +181,7 @@ export function MessageRow({
   onRetry,
 }: {
   avatar?: string;
+  emotes?: RenderableEmote[];
   message: Message;
   onDelete: (message: Message) => void;
   onEdit: (message: Message) => void;
@@ -215,7 +212,16 @@ export function MessageRow({
             <span>{message.replyTo.body}</span>
           </div>
         ) : null}
-        <p className="message-body">{message.body || ' '}</p>
+        <p className="message-body">
+          {(message.body || ' ').split(/(:[a-z0-9_-]+:)/gi).map((part, index) => {
+            const emote = emotes.find(({ name }) => `:${name}:`.toLowerCase() === part.toLowerCase());
+            return emote ? (
+              <img className="message-custom-emote" src={emote.dataUrl} alt={`:${emote.name}:`} key={`${emote.id}-${index}`} />
+            ) : (
+              <span key={`${part}-${index}`}>{part}</span>
+            );
+          })}
+        </p>
         {message.attachments.length > 0 ? (
           <div className="message-attachments" aria-label="Message attachments">
             {message.attachments.map((attachment) => (
@@ -255,6 +261,18 @@ export function MessageRow({
               {emoji}
             </button>
           ))}
+          {emotes.slice(0, 3).map((emote) => (
+            <button
+              type="button"
+              key={emote.id}
+              className="emoji-action custom-emote-action"
+              onClick={() => onReact(message, `:${emote.name}:`)}
+              aria-label={`React with ${emote.name}`}
+              title={`:${emote.name}:`}
+            >
+              <img src={emote.dataUrl} alt="" />
+            </button>
+          ))}
           {message.own ? (
             <>
               <button type="button" onClick={() => onEdit(message)} aria-label="Edit message">
@@ -275,7 +293,11 @@ export function MessageRow({
                 key={emoji}
                 onClick={() => onReact(message, emoji)}
               >
-                {emoji} <span>{count}</span>
+                {(() => {
+                  const emote = emotes.find(({ name }) => `:${name}:` === emoji);
+                  return emote ? <img src={emote.dataUrl} alt={emoji} /> : emoji;
+                })()}{' '}
+                <span>{count}</span>
               </button>
             ))}
             <button type="button" className="reaction-add" aria-label="Add reaction">
