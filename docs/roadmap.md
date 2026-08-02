@@ -100,6 +100,8 @@ The reusable Matrix federation policy boundary is implemented and tested in `@sc
 
 Prepare security review, dependency and license audits, fuzz/load testing, backup/restore, privacy/accessibility review, observability, alerting, and upgrade tests.
 
+The production-readiness contract foundation is implemented and tested in `@scuttlebutt/production-hardening`, covering release evidence gates, dependency/license findings, rate limits, backup/restore checks, disaster recovery, log redaction, metrics/traces, alerts, and test-plan inventory. Real audits, drills, exporters, CI release gates, and deployment-specific upgrade tests remain before this phase can be marked complete. See [the Phase 12 report](phase-12-report.md).
+
 ## Phase 13 — Mobile preparation
 
 Define shared contracts, push design, mobile key storage, background calls, bandwidth modes, deep links, and device verification before choosing React Native versus native clients.

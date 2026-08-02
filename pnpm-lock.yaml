@@ -147,6 +147,8 @@ importers:
 
   packages/moderation: {}
 
+  packages/production-hardening: {}
+
   packages/shared-types: {}
 
   packages/testing: {}
