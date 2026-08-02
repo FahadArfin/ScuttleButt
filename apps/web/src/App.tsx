@@ -170,6 +170,7 @@ export function PersonAvatar({
 }
 
 export function MessageRow({
+  avatar,
   message,
   onDelete,
   onEdit,
@@ -177,6 +178,7 @@ export function MessageRow({
   onReply,
   onRetry,
 }: {
+  avatar?: string;
   message: Message;
   onDelete: (message: Message) => void;
   onEdit: (message: Message) => void;
@@ -190,7 +192,11 @@ export function MessageRow({
       data-testid={E2E_SELECTORS.message}
       data-message-id={message.id}
     >
-      <PersonAvatar image={avatarForMessage(message)} name={message.senderName} status="online" />
+      <PersonAvatar
+        image={message.own && avatar ? avatar : avatarForMessage(message)}
+        name={message.senderName}
+        status="online"
+      />
       <div className="message-content">
         <div className="message-heading">
           <strong>{message.senderName}</strong>

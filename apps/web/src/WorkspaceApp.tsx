@@ -797,6 +797,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                       editingMessage={editingMessage}
                       isLoading={isLoading}
                       messages={filteredMessages}
+                      ownAvatar={profile.avatar}
                       onDelete={(message) => void handleDelete(message)}
                       onEdit={(message) => {
                         setEditingMessage(message);
@@ -880,6 +881,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               isLoading={isLoading}
               isSending={isSending}
               messages={filteredMessages}
+              ownAvatar={profile.avatar}
               replyTo={replyTo}
               onClose={() => setVoiceChatOpen(false)}
               onDelete={(message) => void handleDelete(message)}
@@ -1360,6 +1362,7 @@ function MessageList({
   editingMessage,
   isLoading,
   messages,
+  ownAvatar,
   onDelete,
   onEdit,
   onReact,
@@ -1370,6 +1373,7 @@ function MessageList({
   editingMessage?: Message;
   isLoading: boolean;
   messages: Message[];
+  ownAvatar: string;
   onDelete: (message: Message) => void;
   onEdit: (message: Message) => void;
   onReact: (message: Message, emoji: string) => void;
@@ -1389,6 +1393,7 @@ function MessageList({
       ) : null}
       {messages.map((message) => (
         <MessageRow
+          avatar={ownAvatar}
           key={message.id}
           message={message}
           onDelete={onDelete}
@@ -1854,6 +1859,7 @@ function VoiceChatSidebar({
   isLoading,
   isSending,
   messages,
+  ownAvatar,
   onCancelContext,
   onChange,
   onClose,
@@ -1876,6 +1882,7 @@ function VoiceChatSidebar({
   isLoading: boolean;
   isSending: boolean;
   messages: Message[];
+  ownAvatar: string;
   onCancelContext: () => void;
   onChange: (value: string) => void;
   onClose: () => void;
@@ -1909,6 +1916,7 @@ function VoiceChatSidebar({
           editingMessage={editingMessage}
           isLoading={isLoading}
           messages={messages}
+          ownAvatar={ownAvatar}
           onDelete={onDelete}
           onEdit={onEdit}
           onReact={onReact}
