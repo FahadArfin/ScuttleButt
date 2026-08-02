@@ -62,9 +62,15 @@ Integrate MatrixRTC-compatible call signaling with self-hosted LiveKit and Cotur
 
 The client and local infrastructure foundation is implemented. Three-browser media validation, TURN-only testing, and the authenticated MatrixRTC token issuer remain before this phase is complete. See [the Phase 6 report](phase-6-report.md).
 
-## Phase 7 — Video and screen sharing
+## Phase 7 — Video and screen sharing (foundation in progress)
 
-Start at 1080p30. Add actual diagnostics, capture selection, adaptive subscriptions, fullscreen, simulcast, and measured quality fallback before considering 1440p or 4K modes.
+Start at 1080p30. The reusable LiveKit video controller now covers camera capture, screen/window/tab
+selection, optional system audio, camera simulcast, adaptive remote subscriptions, fullscreen
+attachment, and sender/receiver diagnostics. The web preview keeps 1080p60, 1440p30, and 4K60
+disabled until hardware and network measurements justify them. See [the Phase 7 report](phase-7-report.md).
+
+Live camera/display sessions, browser-matrix coverage, and CPU/bandwidth measurements remain before
+this phase can be marked complete.
 
 ## Phase 8 — Desktop application
 

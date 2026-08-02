@@ -30,6 +30,12 @@ test('opens the voice proof-of-concept controls for a voice channel', async ({ p
 
   await page.getByRole('button', { name: /huddle/ }).click();
   await expect(page.getByTestId('voice-poc-panel')).toBeVisible();
+  await expect(page.getByTestId('video-poc-panel')).toBeVisible();
+  await expect(page.getByTestId('video-diagnostics')).toContainText('Resolution');
+  await expect(page.getByLabel('Video quality').locator('option[value="ultra"]')).toHaveAttribute(
+    'disabled',
+    '',
+  );
   await page.getByRole('button', { name: 'Join voice preview' }).click();
   await expect(page.getByText('connected', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Mute' }).click();

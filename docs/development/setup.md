@@ -74,12 +74,14 @@ pnpm test:e2e
 - `packages/ui`: reusable accessible UI shell component.
 - `packages/testing`: shared selectors and test constants.
 - `packages/matrix-client`: typed Matrix SDK boundary and local integration test.
+- `packages/livekit-client`: typed LiveKit voice/video boundary with E2EE, capture, fallback, and diagnostics helpers.
 - `infrastructure/matrix`: Docker Compose and local Synapse setup instructions.
+- `infrastructure/livekit`: local Redis, LiveKit, and Coturn development stack.
 
 Build output is generated under package `dist/` directories and is ignored by Git. Turborepo cache is stored under `.turbo/` and is also ignored.
 
 ## Phase boundary
 
-Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary; a local LiveKit/Coturn stack is still required for real media validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.
+Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary and Phase 7 adds camera/display capture, fallback, fullscreen, and diagnostics; a local LiveKit/Coturn stack is still required for real media validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.
 
 Start the local voice infrastructure with `pnpm voice:up` and stop it with `pnpm voice:down`. The web voice panel is a preview until a server-issued short-lived LiveKit token, a MatrixRTC membership check, and a dedicated E2EE worker are supplied.

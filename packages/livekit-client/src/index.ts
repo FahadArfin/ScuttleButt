@@ -7,6 +7,10 @@ import {
   type RoomOptions,
 } from 'livekit-client';
 
+import { VideoClient, type VideoCapabilityBudget } from './video.js';
+
+export * from './video.js';
+
 export type VoiceConnectionState =
   'connected' | 'connecting' | 'disconnected' | 'failed' | 'reconnecting';
 export type VoiceConnectionQuality = 'excellent' | 'good' | 'lost' | 'poor' | 'unknown';
@@ -287,6 +291,13 @@ export class VoiceClient {
 
   async startAudio(): Promise<void> {
     await this.requireRoom().startAudio();
+  }
+
+  createVideoClient(options: { capabilityBudget?: VideoCapabilityBudget } = {}): VideoClient {
+    return new VideoClient({
+      capabilityBudget: options.capabilityBudget,
+      getRoom: () => this.room,
+    });
   }
 
   private requireRoom(): Room {

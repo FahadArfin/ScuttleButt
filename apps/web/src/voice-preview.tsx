@@ -3,6 +3,8 @@ import { useState } from 'react';
 import type { VoiceParticipantSnapshot, VoiceSessionSnapshot } from '@scuttlebutt/livekit-client';
 import { E2E_SELECTORS } from '@scuttlebutt/testing';
 
+import { VideoPreviewPanel } from './video-preview.js';
+
 const LOCAL_PARTICIPANT: VoiceParticipantSnapshot = {
   connectionQuality: 'excellent',
   identity: 'fahad',
@@ -172,6 +174,7 @@ export function VoicePreviewPanel({ roomName }: { roomName: string }) {
             : 'TURN fallback ready'}
         </span>
       </div>
+      <VideoPreviewPanel roomName={roomName} />
     </section>
   );
 }
