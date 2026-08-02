@@ -27,8 +27,8 @@ export interface WorkspaceGroup {
   name: string;
 }
 
-export const GROUP_STORAGE_KEY = 'scuttlebutt:workspace-groups:v2';
-export const DM_STORAGE_KEY = 'scuttlebutt:custom-dms:v2';
+export const GROUP_STORAGE_KEY = 'scuttlebutt:workspace-groups:v3';
+export const DM_STORAGE_KEY = 'scuttlebutt:custom-dms:v3';
 
 export const AVATARS = {
   alex: '/avatars/alex-rivers.webp',
@@ -39,16 +39,7 @@ export const AVATARS = {
   taylor: '/avatars/taylor-nguyen.webp',
 };
 
-export const MEMBERS: WorkspaceMember[] = [
-  { id: 'alex', avatar: AVATARS.alex, name: 'Alex Rivers', note: 'Owner', status: 'online' },
-  { id: 'maya', avatar: AVATARS.maya, name: 'Maya Patel', note: 'Online', status: 'online' },
-  { id: 'sam', avatar: AVATARS.sam, name: 'Sam Lee', note: 'Online', status: 'online' },
-  { id: 'priya', avatar: AVATARS.priya, name: 'Priya Shah', note: 'Online', status: 'online' },
-  { id: 'jordan', avatar: AVATARS.jordan, name: 'Jordan Park', note: 'Online', status: 'online' },
-  { id: 'taylor', avatar: AVATARS.taylor, name: 'Taylor Nguyen', note: 'Away', status: 'away' },
-  { id: 'chris', avatar: AVATARS.jordan, name: 'Chris Diaz', note: 'Away', status: 'away' },
-  { id: 'riley', avatar: AVATARS.sam, name: 'Riley Chen', note: 'Offline', status: 'offline' },
-];
+export const MEMBERS: WorkspaceMember[] = [];
 
 export const DEFAULT_GROUPS: WorkspaceGroup[] = [
   {
@@ -172,9 +163,9 @@ export const DEFAULT_GROUPS: WorkspaceGroup[] = [
 export function loadStoredGroups(): WorkspaceGroup[] {
   try {
     const stored = window.localStorage.getItem(GROUP_STORAGE_KEY);
-    return stored ? (JSON.parse(stored) as WorkspaceGroup[]) : DEFAULT_GROUPS;
+    return stored ? (JSON.parse(stored) as WorkspaceGroup[]) : [];
   } catch {
-    return DEFAULT_GROUPS;
+    return [];
   }
 }
 
@@ -213,7 +204,7 @@ export function conversationForChannel(
     updatedAt: 'Now',
     unreadCount: 0,
     encrypted: true,
-    members: MEMBERS.length,
+    members: Math.max(1, channel.participantIds.length),
     categoryId: group.id,
     categoryName: group.name,
     channelKind: channel.kind,

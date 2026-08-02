@@ -21,6 +21,18 @@ interface GoogleCredentialBody {
   credential: string;
 }
 
+interface ProfileBody extends GoogleCredentialBody {
+  profile: {
+    avatarUrl: string | null;
+    backgroundColor: string;
+    bio: string;
+    interests: string[];
+    joinedServerIds: string[];
+    name: string;
+    tags: string[];
+  };
+}
+
 export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: true });
   const google = options.googleClientId ? new OAuth2Client(options.googleClientId) : undefined;
@@ -68,6 +80,57 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
           email: identity.email,
           name: identity.name,
           avatarUrl: identity.avatarUrl ?? null,
+          backgroundColor: '#6d5f82',
+          bio: '',
+          tags: [],
+          interests: [],
+          joinedServerIds: [],
+          onboardingCompleted: false,
+        };
+    return { user };
+  });
+
+  app.put<{ Body: ProfileBody }>('/api/profile', async (request, reply) => {
+    if (!google || !options.googleClientId) {
+      return reply.code(503).send({ error: 'Google sign-in is not configured.' });
+    }
+    const ticket = await google.verifyIdToken({
+      idToken: request.body.credential,
+      audience: options.googleClientId,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+      return reply.code(401).send({ error: 'Google identity could not be verified.' });
+    }
+    const profile = request.body.profile;
+    if (
+      !profile?.name?.trim() ||
+      profile.name.trim().length > 40 ||
+      profile.bio.trim().split(/\s+/).filter(Boolean).length > 10 ||
+      profile.tags.length > 5 ||
+      profile.interests.length > 8 ||
+      (profile.avatarUrl?.length ?? 0) > 3_000_000
+    ) {
+      return reply.code(400).send({ error: 'Profile details are invalid.' });
+    }
+    const sanitized = {
+      avatarUrl: profile.avatarUrl,
+      backgroundColor: /^#[0-9a-f]{6}$/i.test(profile.backgroundColor)
+        ? profile.backgroundColor
+        : '#6d5f82',
+      bio: profile.bio.trim(),
+      interests: profile.interests.slice(0, 8),
+      joinedServerIds: profile.joinedServerIds.slice(0, 12),
+      name: profile.name.trim(),
+      tags: profile.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 5),
+    };
+    const user = database
+      ? await database.updateUserProfile(payload.sub, sanitized)
+      : {
+          ...sanitized,
+          id: payload.sub,
+          email: payload.email,
+          onboardingCompleted: true,
         };
     return { user };
   });

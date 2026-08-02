@@ -15,7 +15,7 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <AuthGate>
-      <App />
+      {(user) => <App user={user} />}
     </AuthGate>
   </StrictMode>,
 );

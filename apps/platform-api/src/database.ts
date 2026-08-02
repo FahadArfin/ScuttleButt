@@ -4,9 +4,25 @@ import { Pool } from 'pg';
 
 export interface AppUser {
   avatarUrl: string | null;
+  backgroundColor: string;
+  bio: string;
   email: string;
   id: string;
+  interests: string[];
+  joinedServerIds: string[];
   name: string;
+  onboardingCompleted: boolean;
+  tags: string[];
+}
+
+export interface UserProfileUpdate {
+  avatarUrl: string | null;
+  backgroundColor: string;
+  bio: string;
+  interests: string[];
+  joinedServerIds: string[];
+  name: string;
+  tags: string[];
 }
 
 export class ScuttlebuttDatabase {
@@ -31,12 +47,20 @@ export class ScuttlebuttDatabase {
         avatar_object_key text,
         profile_banner_color text NOT NULL DEFAULT '#6d5f82',
         profile_bio text NOT NULL DEFAULT '',
+        profile_tags text[] NOT NULL DEFAULT '{}',
+        profile_interests text[] NOT NULL DEFAULT '{}',
+        joined_server_ids text[] NOT NULL DEFAULT '{}',
+        onboarding_completed boolean NOT NULL DEFAULT false,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_object_key text;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_banner_color text NOT NULL DEFAULT '#6d5f82';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_bio text NOT NULL DEFAULT '';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_tags text[] NOT NULL DEFAULT '{}';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_interests text[] NOT NULL DEFAULT '{}';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_server_ids text[] NOT NULL DEFAULT '{}';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed boolean NOT NULL DEFAULT false;
       CREATE TABLE IF NOT EXISTS friend_codes (
         user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         code_digest text UNIQUE NOT NULL,
@@ -109,15 +133,56 @@ export class ScuttlebuttDatabase {
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (google_subject) DO UPDATE SET
         email = EXCLUDED.email,
-        display_name = EXCLUDED.display_name,
+        display_name = CASE
+          WHEN users.onboarding_completed THEN users.display_name
+          ELSE EXCLUDED.display_name
+        END,
         avatar_url = COALESCE(users.avatar_url, EXCLUDED.avatar_url),
         updated_at = now()
-      RETURNING id, email, display_name AS name, avatar_url AS "avatarUrl"
+      RETURNING id, email, display_name AS name, avatar_url AS "avatarUrl",
+        profile_banner_color AS "backgroundColor", profile_bio AS bio,
+        profile_tags AS tags, profile_interests AS interests,
+        joined_server_ids AS "joinedServerIds", onboarding_completed AS "onboardingCompleted"
     `,
       [randomUUID(), input.googleSubject, input.email, input.name, input.avatarUrl ?? null],
     );
     const user = result.rows[0];
     if (!user) throw new Error('Google user could not be stored.');
+    return user;
+  }
+
+  async updateUserProfile(googleSubject: string, profile: UserProfileUpdate): Promise<AppUser> {
+    const result = await this.pool.query<AppUser>(
+      `
+      UPDATE users SET
+        display_name = $2,
+        avatar_url = $3,
+        profile_banner_color = $4,
+        profile_bio = $5,
+        profile_tags = $6,
+        profile_interests = $7,
+        joined_server_ids = $8,
+        onboarding_completed = true,
+        updated_at = now()
+      WHERE google_subject = $1
+      RETURNING id, email, display_name AS name, avatar_url AS "avatarUrl",
+        profile_banner_color AS "backgroundColor", profile_bio AS bio,
+        profile_tags AS tags, profile_interests AS interests,
+        joined_server_ids AS "joinedServerIds", onboarding_completed AS "onboardingCompleted"
+    `,
+      [
+        googleSubject,
+        profile.name,
+        profile.avatarUrl,
+        profile.backgroundColor,
+        profile.bio,
+        profile.tags,
+        profile.interests,
+        profile.joinedServerIds,
+      ],
+    );
+    const user = result.rows[0];
+    if (!user) throw new Error('User profile could not be updated.');
     return user;
   }
 

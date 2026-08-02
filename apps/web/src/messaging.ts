@@ -278,6 +278,10 @@ const initialMessages: Record<string, Message[]> = {
   ],
 };
 
+// Retained only as legacy fixtures for older component previews; the active repository starts empty.
+void initialConversations;
+void initialMessages;
+
 function cloneMessage(message: Message): Message {
   return {
     ...message,
@@ -287,14 +291,19 @@ function cloneMessage(message: Message): Message {
   };
 }
 
-export function createDemoMessagingRepository(): MessagingRepository {
-  const conversations = initialConversations.map((conversation) => ({ ...conversation }));
-  const messages = Object.fromEntries(
-    Object.entries(initialMessages).map(([conversationId, conversationMessages]) => [
-      conversationId,
-      conversationMessages.map(cloneMessage),
-    ]),
-  ) as Record<string, Message[]>;
+export function createDemoMessagingRepository(user?: { id: string; name: string }): MessagingRepository {
+  const conversations: Conversation[] = [];
+  const messages: Record<string, Message[]> = {};
+  const currentUser = {
+    id: user?.id ?? 'local-user',
+    name: user?.name ?? 'Local user',
+    initials: (user?.name ?? 'Local user')
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase(),
+  };
 
   return {
     async createConversation(conversation) {

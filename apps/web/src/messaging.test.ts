@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createDemoMessagingRepository } from './messaging.js';
 
-describe('demo messaging repository', () => {
+describe('local messaging repository', () => {
   it('creates a conversation that can immediately receive messages', async () => {
     const repository = createDemoMessagingRepository();
     await repository.createConversation({
@@ -44,6 +44,19 @@ describe('demo messaging repository', () => {
 
   it('edits, reacts to, deletes, and marks conversations as read', async () => {
     const repository = createDemoMessagingRepository();
+    await repository.createConversation({
+      id: 'lounge',
+      title: 'Lounge',
+      kind: 'channel',
+      avatarLabel: '#',
+      presence: 'Local text channel',
+      preview: 'Start the conversation.',
+      updatedAt: 'Now',
+      unreadCount: 2,
+      encrypted: true,
+      members: 1,
+      channelKind: 'text',
+    });
     const sent = await repository.sendMessage('lounge', 'Temporary note');
 
     await repository.editMessage('lounge', sent.id, 'Updated note');

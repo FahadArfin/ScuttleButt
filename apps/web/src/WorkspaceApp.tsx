@@ -44,6 +44,7 @@ import { APP_NAME } from '@scuttlebutt/shared-types';
 import { E2E_SELECTORS } from '@scuttlebutt/testing';
 
 import { MessageRow, PersonAvatar } from './App.js';
+import type { SignedInUser } from './auth.js';
 import {
   createDemoMessagingRepository,
   type AttachmentDraft,
@@ -57,7 +58,6 @@ import {
   AVATARS,
   DM_STORAGE_KEY,
   GROUP_STORAGE_KEY,
-  MEMBERS,
   conversationForChannel,
   loadStoredDms,
   loadStoredGroups,
@@ -71,6 +71,7 @@ import {
 
 interface WorkspaceAppProps {
   repository?: MessagingRepository;
+  user: SignedInUser;
 }
 
 interface Notice {
@@ -81,7 +82,7 @@ interface Notice {
 const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
 const FRIEND_CODE_STORAGE_KEY = 'scuttlebutt:friend-code';
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const PROFILE_STORAGE_KEY = 'scuttlebutt:profile';
+const PROFILE_STORAGE_KEY = 'scuttlebutt:profile:v2';
 
 interface UserProfile {
   avatar: string;
@@ -91,12 +92,12 @@ interface UserProfile {
   status: string;
 }
 
-function loadProfile(): UserProfile {
+function loadProfile(user: SignedInUser): UserProfile {
   const fallback: UserProfile = {
-    avatar: AVATARS.alex,
-    bannerColor: '#6d5f82',
-    bio: 'Building a safer place to talk with friends.',
-    displayName: 'Alex Rivers',
+    avatar: user.avatarUrl ?? '/scuttlebutt-mark.webp',
+    bannerColor: user.backgroundColor,
+    bio: user.bio,
+    displayName: user.name,
     status: 'Online',
   };
   try {
@@ -155,9 +156,9 @@ function groupIcon(icon: WorkspaceGroup['icon']): ReactNode {
   return <ChatCenteredDots size={24} weight="duotone" />;
 }
 
-export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps = {}) {
+export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
   const [repository] = useState<MessagingRepository>(
-    () => repositoryProp ?? createDemoMessagingRepository(),
+    () => repositoryProp ?? createDemoMessagingRepository({ id: user.id, name: user.name }),
   );
   const [groups, setGroups] = useState<WorkspaceGroup[]>(loadStoredGroups);
   const [customDms, setCustomDms] = useState<Conversation[]>(loadStoredDms);
@@ -184,9 +185,21 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
   const [friendDialogOpen, setFriendDialogOpen] = useState(false);
   const [friendCode] = useState(loadFriendCode);
-  const [profile, setProfile] = useState(loadProfile);
+  const [profile, setProfile] = useState(() => loadProfile(user));
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
+  const members = useMemo<WorkspaceMember[]>(
+    () => [
+      {
+        id: user.id,
+        avatar: profile.avatar,
+        name: profile.displayName,
+        note: 'You',
+        status: 'online',
+      },
+    ],
+    [profile.avatar, profile.displayName, user.id],
+  );
 
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
   const directMessages = conversations.filter(({ kind }) => kind === 'direct');
@@ -470,8 +483,8 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                   : {
                       ...channel,
                       participantIds: connected
-                        ? Array.from(new Set([...channel.participantIds, 'alex']))
-                        : channel.participantIds.filter((id) => id !== 'alex'),
+                        ? Array.from(new Set([...channel.participantIds, user.id]))
+                        : channel.participantIds.filter((id) => id !== user.id),
                     },
               ),
             },
@@ -491,7 +504,7 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                   ? channel
                   : {
                       ...channel,
-                      participantIds: Array.from(new Set([...channel.participantIds, 'alex'])),
+                      participantIds: Array.from(new Set([...channel.participantIds, user.id])),
                     },
               ),
             },
@@ -629,8 +642,10 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             {activeSurface === 'groups' && activeGroup ? (
               <GroupNavigation
                 group={activeGroup}
+                currentUserId={user.id}
                 localAvatar={profile.avatar}
                 localSpeaking={localSpeaking}
+                members={members}
                 selectedConversationId={selectedConversationId}
                 onCreateText={() => setDialogMode('text-channel')}
                 onCreateVoice={() => setDialogMode('voice-channel')}
@@ -731,6 +746,7 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
               <ConversationHeader
                 activeChannelName={activeChannelName}
                 activeGroup={activeGroup}
+                memberCount={members.length}
                 membersVisible={showMembers}
                 notificationsEnabled={notificationsEnabled}
                 search={search}
@@ -758,13 +774,14 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                       <div className="voice-room-stage">
                         <VoicePreviewPanel
                           key={selectedConversation.id}
-                          connected={selectedChannel?.participantIds.includes('alex') ?? false}
+                          connected={selectedChannel?.participantIds.includes(user.id) ?? false}
+                          localUser={{ avatar: profile.avatar, identity: user.id, name: profile.displayName }}
                           roomName={selectedChannel?.name ?? selectedConversation.title}
                           participants={(selectedChannel?.participantIds ?? [])
-                            .map((id) => MEMBERS.find((member) => member.id === id))
+                            .map((id) => members.find((member) => member.id === id))
                             .filter((member): member is WorkspaceMember => Boolean(member))
                             .map((member) => ({
-                              avatar: member.id === 'alex' ? profile.avatar : member.avatar,
+                              avatar: member.id === user.id ? profile.avatar : member.avatar,
                               identity: member.id,
                               isSpeaking: false,
                               name: member.name,
@@ -898,15 +915,16 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             />
           ) : (
             <VoiceMembersSidebar
+              currentUserId={user.id}
               localAvatar={profile.avatar}
               localSpeaking={localSpeaking}
               participants={(selectedChannel?.participantIds ?? [])
-                .map((id) => MEMBERS.find((member) => member.id === id))
+                .map((id) => members.find((member) => member.id === id))
                 .filter((member): member is WorkspaceMember => Boolean(member))}
             />
           )
         ) : showMembers ? (
-          <MembersSidebar onNotice={setNotice} />
+          <MembersSidebar members={members} onNotice={setNotice} />
         ) : null}
       </section>
 
@@ -1053,7 +1071,7 @@ function DirectMessageNavigation({
             >
               <PersonAvatar
                 image={
-                  MEMBERS.find(({ name }) => name === conversation.title)?.avatar ?? AVATARS.jordan
+                  '/scuttlebutt-mark.webp'
                 }
                 name={conversation.title}
                 status="online"
@@ -1076,18 +1094,22 @@ function DirectMessageNavigation({
 }
 
 function GroupNavigation({
+  currentUserId,
   group,
   localAvatar,
   localSpeaking,
+  members,
   onCreateText,
   onCreateVoice,
   onJoinVoice,
   onSelectText,
   selectedConversationId,
 }: {
+  currentUserId: string;
   group: WorkspaceGroup;
   localAvatar: string;
   localSpeaking: boolean;
+  members: WorkspaceMember[];
   onCreateText: () => void;
   onCreateVoice: () => void;
   onJoinVoice: (id: string) => void;
@@ -1111,6 +1133,8 @@ function GroupNavigation({
         type="text"
         localAvatar={localAvatar}
         localSpeaking={localSpeaking}
+        currentUserId={currentUserId}
+        members={members}
       />
       <ChannelSection
         channels={group.channels.filter(({ kind }) => kind === 'voice')}
@@ -1120,6 +1144,8 @@ function GroupNavigation({
         type="voice"
         localAvatar={localAvatar}
         localSpeaking={localSpeaking}
+        currentUserId={currentUserId}
+        members={members}
       />
     </>
   );
@@ -1127,16 +1153,20 @@ function GroupNavigation({
 
 function ChannelSection({
   channels,
+  currentUserId,
   localAvatar,
   localSpeaking,
+  members,
   onCreate,
   onSelect,
   selectedConversationId,
   type,
 }: {
   channels: WorkspaceChannel[];
+  currentUserId: string;
   localAvatar: string;
   localSpeaking: boolean;
+  members: WorkspaceMember[];
   onCreate: () => void;
   onSelect: (conversationId: string) => void;
   selectedConversationId: string;
@@ -1168,7 +1198,7 @@ function ChannelSection({
           );
         }
         const participants = channel.participantIds
-          .map((id) => MEMBERS.find((member) => member.id === id))
+          .map((id) => members.find((member) => member.id === id))
           .filter((member): member is WorkspaceMember => Boolean(member));
         return (
           <div
@@ -1197,12 +1227,12 @@ function ChannelSection({
                     type="button"
                     key={participant.id}
                     className={
-                      participant.id === 'alex' && localSpeaking ? 'voice-user-speaking' : ''
+                      participant.id === currentUserId && localSpeaking ? 'voice-user-speaking' : ''
                     }
                     onClick={() => onSelect(channel.conversationId)}
                   >
                     <PersonAvatar
-                      image={participant.id === 'alex' ? localAvatar : participant.avatar}
+                      image={participant.id === currentUserId ? localAvatar : participant.avatar}
                       name={participant.name}
                       status="online"
                       size="small"
@@ -1223,6 +1253,7 @@ function ChannelSection({
 function ConversationHeader({
   activeChannelName,
   activeGroup,
+  memberCount,
   membersVisible,
   notificationsEnabled,
   onMembersToggle,
@@ -1236,6 +1267,7 @@ function ConversationHeader({
 }: {
   activeChannelName: string;
   activeGroup?: WorkspaceGroup;
+  memberCount: number;
   membersVisible: boolean;
   notificationsEnabled: boolean;
   onMembersToggle: () => void;
@@ -1306,7 +1338,7 @@ function ConversationHeader({
           onClick={onMembersToggle}
           aria-pressed={membersVisible}
         >
-          <Users size={19} /> {MEMBERS.length}
+          <Users size={19} /> {memberCount}
         </button>
         <label className="header-search">
           <MagnifyingGlass size={18} />
@@ -1765,10 +1797,12 @@ function ProfileSettingsDialog({
 }
 
 function VoiceMembersSidebar({
+  currentUserId,
   localAvatar,
   localSpeaking,
   participants,
 }: {
+  currentUserId: string;
   localAvatar: string;
   localSpeaking: boolean;
   participants: WorkspaceMember[];
@@ -1784,14 +1818,14 @@ function VoiceMembersSidebar({
       </div>
       <div className="voice-member-list">
         {participants.map((participant) => {
-          const speaking = participant.id === 'alex' && localSpeaking;
+          const speaking = participant.id === currentUserId && localSpeaking;
           return (
             <article
               className={`voice-member-card ${speaking ? 'voice-member-speaking' : ''}`}
               key={participant.id}
             >
               <PersonAvatar
-                image={participant.id === 'alex' ? localAvatar : participant.avatar}
+                image={participant.id === currentUserId ? localAvatar : participant.avatar}
                 name={participant.name}
                 status="online"
                 size="large"
@@ -1970,18 +2004,24 @@ function FriendCodeDialog({
   );
 }
 
-function MembersSidebar({ onNotice }: { onNotice: (notice: Notice) => void }) {
+function MembersSidebar({
+  members,
+  onNotice,
+}: {
+  members: WorkspaceMember[];
+  onNotice: (notice: Notice) => void;
+}) {
   return (
     <aside className="members-sidebar" aria-label="Community members">
       {(['online', 'away', 'offline'] as const).map((status) => {
-        const members = MEMBERS.filter((member) => member.status === status);
+        const statusMembers = members.filter((member) => member.status === status);
         return (
           <section className="member-group" key={status}>
             <h2>
-              {status} — {members.length}
+              {status} — {statusMembers.length}
             </h2>
             <div className="member-list">
-              {members.map((member) => (
+              {statusMembers.map((member) => (
                 <button
                   type="button"
                   className={`member-row member-${member.status}`}

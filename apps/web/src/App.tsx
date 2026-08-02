@@ -768,6 +768,11 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
             >
               {selectedConversation?.channelKind === 'voice' ? (
                 <VoicePreviewPanel
+                  localUser={{
+                    avatar: '/scuttlebutt-mark.webp',
+                    identity: 'local-user',
+                    name: 'Local user',
+                  }}
                   roomName={selectedConversation.voiceRoomId ?? selectedConversation.id}
                 />
               ) : (

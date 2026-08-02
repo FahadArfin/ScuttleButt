@@ -64,12 +64,14 @@ function stopStream(stream?: MediaStream): void {
 
 export function VoicePreviewPanel({
   connected = false,
+  localUser,
   onConnectionChange,
   onSpeakingChange,
   participants = [],
   roomName,
 }: {
   connected?: boolean;
+  localUser: CallParticipant;
   onConnectionChange?: (connected: boolean) => void;
   onSpeakingChange?: (speaking: boolean) => void;
   participants?: CallParticipant[];
@@ -297,7 +299,7 @@ export function VoicePreviewPanel({
 
   const visibleParticipants = participants.length
     ? participants
-    : [{ identity: 'alex', name: 'Alex Rivers', avatar: '', isSpeaking: localSpeaking }];
+    : [{ ...localUser, isSpeaking: localSpeaking }];
 
   return (
     <section
@@ -308,19 +310,19 @@ export function VoicePreviewPanel({
       <div className={`call-participant-grid call-grid-${Math.min(visibleParticipants.length, 4)}`}>
         {visibleParticipants.map((participant) => {
           const speaking =
-            participant.identity === 'alex' ? localSpeaking : Boolean(participant.isSpeaking);
+            participant.identity === localUser.identity ? localSpeaking : Boolean(participant.isSpeaking);
           return (
             <article
               className={`call-participant-tile ${speaking ? 'call-participant-speaking' : ''}`}
               key={participant.identity}
             >
-              {participant.identity === 'alex' && (cameraEnabled || sharing) ? (
+              {participant.identity === localUser.identity && (cameraEnabled || sharing) ? (
                 <video ref={videoRef} autoPlay muted playsInline />
               ) : (
                 <img src={participant.avatar} alt="" />
               )}
               <span className="call-participant-name">
-                {participant.identity === 'alex' && muted ? <MicrophoneSlash size={14} /> : null}
+                {participant.identity === localUser.identity && muted ? <MicrophoneSlash size={14} /> : null}
                 {participant.name}
               </span>
               {speaking ? <span className="speaking-label">Speaking</span> : null}

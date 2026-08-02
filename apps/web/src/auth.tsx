@@ -2,14 +2,37 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { ChatCenteredDots, LockSimple } from '@phosphor-icons/react';
 
-interface SignedInUser {
+import { OnboardingPage } from './onboarding.js';
+
+export interface SignedInUser {
   avatarUrl: string | null;
+  backgroundColor: string;
+  bio: string;
   email: string;
   id: string;
+  interests: string[];
+  joinedServerIds: string[];
   name: string;
+  onboardingCompleted: boolean;
+  tags: string[];
 }
 interface GoogleCredentialResponse {
   credential: string;
+}
+
+function normalizeUser(user: Partial<SignedInUser> & Pick<SignedInUser, 'email' | 'id' | 'name'>): SignedInUser {
+  return {
+    avatarUrl: user.avatarUrl ?? null,
+    backgroundColor: user.backgroundColor ?? '#5865f2',
+    bio: user.bio ?? '',
+    email: user.email,
+    id: user.id,
+    interests: user.interests ?? [],
+    joinedServerIds: user.joinedServerIds ?? [],
+    name: user.name,
+    onboardingCompleted: user.onboardingCompleted ?? false,
+    tags: user.tags ?? [],
+  };
 }
 
 declare global {
@@ -28,11 +51,11 @@ declare global {
   }
 }
 
-export function AuthGate({ children }: { children: ReactNode }) {
+export function AuthGate({ children }: { children: (user: SignedInUser) => ReactNode }) {
   const [clientId, setClientId] = useState<string | null | undefined>(undefined);
   const [user, setUser] = useState<SignedInUser | null>(() => {
     const stored = sessionStorage.getItem('scuttlebutt:user');
-    return stored ? (JSON.parse(stored) as SignedInUser) : null;
+    return stored ? normalizeUser(JSON.parse(stored) as SignedInUser) : null;
   });
   const [error, setError] = useState('');
   const buttonRef = useRef<HTMLDivElement>(null);
@@ -64,9 +87,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
             .then(async (result) => {
               if (!result.ok) throw new Error('Google sign-in could not be completed.');
               const payload = (await result.json()) as { user: SignedInUser };
-              sessionStorage.setItem('scuttlebutt:user', JSON.stringify(payload.user));
+              const nextUser = normalizeUser(payload.user);
+              sessionStorage.setItem('scuttlebutt:user', JSON.stringify(nextUser));
               sessionStorage.setItem('scuttlebutt:google-credential', response.credential);
-              setUser(payload.user);
+              setUser(nextUser);
             })
             .catch((reason: unknown) =>
               setError(reason instanceof Error ? reason.message : 'Sign-in failed.'),
@@ -95,7 +119,23 @@ export function AuthGate({ children }: { children: ReactNode }) {
     document.head.append(script);
   }, [clientId, user]);
 
-  if (user || clientId === null) return children;
+  if (user) {
+    return user.onboardingCompleted ? children(user) : <OnboardingPage user={user} onComplete={setUser} />;
+  }
+  if (clientId === null) {
+    return children({
+      avatarUrl: null,
+      backgroundColor: '#5865f2',
+      bio: '',
+      email: 'local@scuttlebutt.test',
+      id: 'local-user',
+      interests: [],
+      joinedServerIds: [],
+      name: 'Local user',
+      onboardingCompleted: true,
+      tags: [],
+    });
+  }
   if (clientId === undefined) return <div className="auth-loading">Loading Scuttlebutt…</div>;
 
   return (
