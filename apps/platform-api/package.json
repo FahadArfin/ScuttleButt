@@ -1,0 +1,19 @@
+{
+  "name": "@scuttlebutt/platform-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/server.ts",
+    "lint": "eslint .",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@scuttlebutt/config": "workspace:*",
+    "@scuttlebutt/shared-types": "workspace:*",
+    "fastify": "5.11.0"
+  }
+}
