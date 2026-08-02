@@ -33,6 +33,19 @@ gcloud config set project scuttlebutt-504320
 
 Current test deployment: <https://scuttlebutt-d5v23kpsfa-ue.a.run.app>
 
+## Continuous deployment
+
+`.github/workflows/deploy-cloud-run.yml` builds and deploys the existing Cloud Run service whenever the `development` branch is pushed to GitHub. It authenticates with a repository-restricted Workload Identity Federation provider instead of a long-lived service-account key, preserves the service's database and environment configuration, and verifies `/health` after deployment.
+
+The workflow requires these GitHub repository secrets:
+
+- `GCP_PROJECT_ID`
+- `GCP_REGION`
+- `GCP_SERVICE_ACCOUNT`
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+
+A local commit does not trigger GitHub Actions until it is pushed to `origin/development`.
+
 After the first deployment, copy the Cloud Run URL into the OAuth client's authorized JavaScript origins. The deployed service already uses that exact HTTPS origin for CORS.
 
 ## Voice production boundary
