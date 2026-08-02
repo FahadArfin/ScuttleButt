@@ -22,12 +22,11 @@ The containerized app is served on port 8080, PostgreSQL on 5433, and LiveKit on
 
 ## Google Cloud
 
-Create and select a project, attach billing, then run the deployment helper from the repository root:
+The Google Cloud project is `scuttlebutt-504320`. Confirm billing is attached, then run the deployment helper from the repository root:
 
 ```powershell
-gcloud projects create YOUR_UNIQUE_PROJECT_ID --name Scuttlebutt
-gcloud billing projects link YOUR_UNIQUE_PROJECT_ID --billing-account YOUR_BILLING_ACCOUNT_ID
-.\infrastructure\gcp\deploy.ps1 -ProjectId YOUR_UNIQUE_PROJECT_ID -GoogleClientId YOUR_CLIENT_ID -DatabasePassword A_LONG_RANDOM_PASSWORD
+gcloud config set project scuttlebutt-504320
+.\infrastructure\gcp\deploy.ps1 -GoogleClientId YOUR_CLIENT_ID -DatabasePassword A_LONG_RANDOM_PASSWORD
 ```
 
 After the first deployment, copy the Cloud Run URL into the OAuth client's authorized JavaScript origins and redeploy with `WEB_ORIGIN` set to that exact HTTPS origin.

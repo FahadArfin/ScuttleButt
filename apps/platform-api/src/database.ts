@@ -28,9 +28,15 @@ export class ScuttlebuttDatabase {
         email text UNIQUE NOT NULL,
         display_name text NOT NULL,
         avatar_url text,
+        avatar_object_key text,
+        profile_banner_color text NOT NULL DEFAULT '#6d5f82',
+        profile_bio text NOT NULL DEFAULT '',
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_object_key text;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_banner_color text NOT NULL DEFAULT '#6d5f82';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_bio text NOT NULL DEFAULT '';
       CREATE TABLE IF NOT EXISTS friend_codes (
         user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         code_digest text UNIQUE NOT NULL,
@@ -104,7 +110,7 @@ export class ScuttlebuttDatabase {
       ON CONFLICT (google_subject) DO UPDATE SET
         email = EXCLUDED.email,
         display_name = EXCLUDED.display_name,
-        avatar_url = EXCLUDED.avatar_url,
+        avatar_url = COALESCE(users.avatar_url, EXCLUDED.avatar_url),
         updated_at = now()
       RETURNING id, email, display_name AS name, avatar_url AS "avatarUrl"
     `,

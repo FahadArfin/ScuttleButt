@@ -1,5 +1,5 @@
 param(
-  [Parameter(Mandatory = $true)][string]$ProjectId,
+  [string]$ProjectId = 'scuttlebutt-504320',
   [Parameter(Mandatory = $true)][string]$GoogleClientId,
   [Parameter(Mandatory = $true)][string]$DatabasePassword,
   [string]$Region = 'us-east1'

@@ -10,6 +10,7 @@ import {
 
 import {
   Bell,
+  Camera,
   CaretDown,
   ChatCenteredDots,
   Code,
@@ -35,6 +36,7 @@ import {
   Star,
   UserPlus,
   Users,
+  UploadSimple,
   Waveform,
   X,
 } from '@phosphor-icons/react';
@@ -79,6 +81,33 @@ interface Notice {
 const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
 const FRIEND_CODE_STORAGE_KEY = 'scuttlebutt:friend-code';
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const PROFILE_STORAGE_KEY = 'scuttlebutt:profile';
+
+interface UserProfile {
+  avatar: string;
+  bannerColor: string;
+  bio: string;
+  displayName: string;
+  status: string;
+}
+
+function loadProfile(): UserProfile {
+  const fallback: UserProfile = {
+    avatar: AVATARS.alex,
+    bannerColor: '#6d5f82',
+    bio: 'Building a safer place to talk with friends.',
+    displayName: 'Alex Rivers',
+    status: 'Online',
+  };
+  try {
+    return {
+      ...fallback,
+      ...(JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? '{}') as Partial<UserProfile>),
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 function loadFriendCode(): string {
   const stored = window.localStorage.getItem(FRIEND_CODE_STORAGE_KEY);
@@ -155,6 +184,9 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
   const [friendDialogOpen, setFriendDialogOpen] = useState(false);
   const [friendCode] = useState(loadFriendCode);
+  const [profile, setProfile] = useState(loadProfile);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [localSpeaking, setLocalSpeaking] = useState(false);
 
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
   const directMessages = conversations.filter(({ kind }) => kind === 'direct');
@@ -206,6 +238,10 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
   useEffect(() => {
     window.localStorage.setItem(DM_STORAGE_KEY, JSON.stringify(customDms));
   }, [customDms]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  }, [profile]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -593,6 +629,8 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             {activeSurface === 'groups' && activeGroup ? (
               <GroupNavigation
                 group={activeGroup}
+                localAvatar={profile.avatar}
+                localSpeaking={localSpeaking}
                 selectedConversationId={selectedConversationId}
                 onCreateText={() => setDialogMode('text-channel')}
                 onCreateVoice={() => setDialogMode('voice-channel')}
@@ -624,10 +662,10 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
               onClick={() => setProfileOpen((open) => !open)}
               aria-expanded={profileOpen}
             >
-              <PersonAvatar image={AVATARS.alex} name="Alex Rivers" status="online" />
+              <PersonAvatar image={profile.avatar} name={profile.displayName} status="online" />
               <span>
-                <strong>Alex Rivers</strong>
-                <small>Online</small>
+                <strong>{profile.displayName}</strong>
+                <small>{profile.status}</small>
               </span>
             </button>
             <IconButton
@@ -651,13 +689,28 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             </IconButton>
             {profileOpen ? (
               <div className="profile-popover" role="dialog" aria-label="Profile menu">
-                <strong>Alex Rivers</strong>
-                <span>Local demo account</span>
+                <div
+                  className="profile-popover-preview"
+                  style={{ backgroundColor: profile.bannerColor }}
+                >
+                  <PersonAvatar image={profile.avatar} name={profile.displayName} size="large" />
+                </div>
+                <strong>{profile.displayName}</strong>
+                <span>{profile.bio}</span>
                 <span className="profile-friend-code">
                   Friend code <b>{friendCode}</b>
                 </span>
                 <button type="button" onClick={() => setFriendDialogOpen(true)}>
                   <UserPlus size={16} /> Add a friend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    setProfileDialogOpen(true);
+                  }}
+                >
+                  <Camera size={16} /> Edit profile
                 </button>
                 <button
                   type="button"
@@ -711,11 +764,13 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                             .map((id) => MEMBERS.find((member) => member.id === id))
                             .filter((member): member is WorkspaceMember => Boolean(member))
                             .map((member) => ({
-                              avatar: member.avatar,
+                              avatar: member.id === 'alex' ? profile.avatar : member.avatar,
                               identity: member.id,
+                              isSpeaking: false,
                               name: member.name,
                             }))}
                           onConnectionChange={updateVoiceConnection}
+                          onSpeakingChange={setLocalSpeaking}
                         />
                       </div>
                     </div>
@@ -843,6 +898,8 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             />
           ) : (
             <VoiceMembersSidebar
+              localAvatar={profile.avatar}
+              localSpeaking={localSpeaking}
               participants={(selectedChannel?.participantIds ?? [])
                 .map((id) => MEMBERS.find((member) => member.id === id))
                 .filter((member): member is WorkspaceMember => Boolean(member))}
@@ -866,6 +923,17 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
           friendCode={friendCode}
           onCancel={() => setFriendDialogOpen(false)}
           onSubmit={(code) => void addFriendByCode(code)}
+        />
+      ) : null}
+      {profileDialogOpen ? (
+        <ProfileSettingsDialog
+          profile={profile}
+          onCancel={() => setProfileDialogOpen(false)}
+          onSave={(nextProfile) => {
+            setProfile(nextProfile);
+            setProfileDialogOpen(false);
+            setNotice({ tone: 'info', text: 'Profile updated on this device.' });
+          }}
         />
       ) : null}
     </main>
@@ -1009,6 +1077,8 @@ function DirectMessageNavigation({
 
 function GroupNavigation({
   group,
+  localAvatar,
+  localSpeaking,
   onCreateText,
   onCreateVoice,
   onJoinVoice,
@@ -1016,6 +1086,8 @@ function GroupNavigation({
   selectedConversationId,
 }: {
   group: WorkspaceGroup;
+  localAvatar: string;
+  localSpeaking: boolean;
   onCreateText: () => void;
   onCreateVoice: () => void;
   onJoinVoice: (id: string) => void;
@@ -1037,6 +1109,8 @@ function GroupNavigation({
         onCreate={onCreateText}
         onSelect={onSelectText}
         type="text"
+        localAvatar={localAvatar}
+        localSpeaking={localSpeaking}
       />
       <ChannelSection
         channels={group.channels.filter(({ kind }) => kind === 'voice')}
@@ -1044,6 +1118,8 @@ function GroupNavigation({
         onCreate={onCreateVoice}
         onSelect={onJoinVoice}
         type="voice"
+        localAvatar={localAvatar}
+        localSpeaking={localSpeaking}
       />
     </>
   );
@@ -1051,12 +1127,16 @@ function GroupNavigation({
 
 function ChannelSection({
   channels,
+  localAvatar,
+  localSpeaking,
   onCreate,
   onSelect,
   selectedConversationId,
   type,
 }: {
   channels: WorkspaceChannel[];
+  localAvatar: string;
+  localSpeaking: boolean;
   onCreate: () => void;
   onSelect: (conversationId: string) => void;
   selectedConversationId: string;
@@ -1116,10 +1196,13 @@ function ChannelSection({
                   <button
                     type="button"
                     key={participant.id}
+                    className={
+                      participant.id === 'alex' && localSpeaking ? 'voice-user-speaking' : ''
+                    }
                     onClick={() => onSelect(channel.conversationId)}
                   >
                     <PersonAvatar
-                      image={participant.avatar}
+                      image={participant.id === 'alex' ? localAvatar : participant.avatar}
                       name={participant.name}
                       status="online"
                       size="small"
@@ -1534,7 +1617,162 @@ function LandingPanel({
   );
 }
 
-function VoiceMembersSidebar({ participants }: { participants: WorkspaceMember[] }) {
+function ProfileSettingsDialog({
+  profile,
+  onCancel,
+  onSave,
+}: {
+  profile: UserProfile;
+  onCancel: () => void;
+  onSave: (profile: UserProfile) => void;
+}) {
+  const [draft, setDraft] = useState(profile);
+  const [error, setError] = useState('');
+  const update = <Key extends keyof UserProfile>(key: Key, value: UserProfile[Key]) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+  const handleAvatar = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Choose a PNG, JPEG, GIF, or WebP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Profile pictures must be smaller than 5 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
+        update('avatar', reader.result);
+        setError('');
+      }
+    });
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div
+      className="modal-backdrop profile-settings-backdrop"
+      role="presentation"
+      onMouseDown={onCancel}
+    >
+      <form
+        className="profile-settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-settings-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(draft);
+        }}
+      >
+        <header>
+          <div>
+            <p className="section-kicker">My account</p>
+            <h2 id="profile-settings-title">Customize profile</h2>
+          </div>
+          <button type="button" aria-label="Close profile settings" onClick={onCancel}>
+            <X size={20} />
+          </button>
+        </header>
+        <div className="profile-editor-layout">
+          <div className="profile-edit-fields">
+            <section className="avatar-upload-section">
+              <span className="profile-field-label">Profile picture</span>
+              <div>
+                <PersonAvatar image={draft.avatar} name={draft.displayName} size="large" />
+                <label className="profile-upload-button">
+                  <UploadSimple size={17} /> Upload image
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    onChange={handleAvatar}
+                  />
+                </label>
+                <button type="button" onClick={() => update('avatar', AVATARS.alex)}>
+                  Reset
+                </button>
+              </div>
+              <small>PNG, JPEG, GIF, or WebP. Maximum 5 MB.</small>
+              {error ? <p role="alert">{error}</p> : null}
+            </section>
+            <label>
+              <span className="profile-field-label">Display name</span>
+              <input
+                value={draft.displayName}
+                maxLength={32}
+                onChange={(event) => update('displayName', event.target.value)}
+              />
+            </label>
+            <label>
+              <span className="profile-field-label">About me</span>
+              <textarea
+                value={draft.bio}
+                maxLength={190}
+                rows={4}
+                onChange={(event) => update('bio', event.target.value)}
+              />
+              <small>{draft.bio.length}/190</small>
+            </label>
+            <label>
+              <span className="profile-field-label">Status text</span>
+              <input
+                value={draft.status}
+                maxLength={40}
+                onChange={(event) => update('status', event.target.value)}
+              />
+            </label>
+            <label>
+              <span className="profile-field-label">Profile color</span>
+              <div className="profile-color-control">
+                <input
+                  type="color"
+                  value={draft.bannerColor}
+                  onChange={(event) => update('bannerColor', event.target.value)}
+                />
+                <span>{draft.bannerColor.toUpperCase()}</span>
+              </div>
+            </label>
+          </div>
+          <aside className="profile-card-preview" aria-label="Profile preview">
+            <div
+              className="profile-preview-banner"
+              style={{ backgroundColor: draft.bannerColor }}
+            />
+            <div className="profile-preview-body">
+              <PersonAvatar image={draft.avatar} name={draft.displayName} size="large" />
+              <h3>{draft.displayName || 'Your name'}</h3>
+              <span>{draft.status || 'Online'}</span>
+              <hr />
+              <strong>About me</strong>
+              <p>{draft.bio || 'Tell friends a little about yourself.'}</p>
+            </div>
+          </aside>
+        </div>
+        <footer>
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!draft.displayName.trim()}>
+            Save changes
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function VoiceMembersSidebar({
+  localAvatar,
+  localSpeaking,
+  participants,
+}: {
+  localAvatar: string;
+  localSpeaking: boolean;
+  participants: WorkspaceMember[];
+}) {
   return (
     <aside className="members-sidebar voice-members-sidebar" aria-label="Voice channel members">
       <div className="voice-sidebar-heading">
@@ -1545,24 +1783,27 @@ function VoiceMembersSidebar({ participants }: { participants: WorkspaceMember[]
         </div>
       </div>
       <div className="voice-member-list">
-        {participants.map((participant, index) => (
-          <article
-            className={`voice-member-card ${index === 0 ? 'voice-member-speaking' : ''}`}
-            key={participant.id}
-          >
-            <PersonAvatar
-              image={participant.avatar}
-              name={participant.name}
-              status="online"
-              size="large"
-            />
-            <span>
-              <strong>{participant.name}</strong>
-              <small>{index === 0 ? 'Speaking now' : 'Listening'}</small>
-            </span>
-            <Microphone size={16} weight="fill" />
-          </article>
-        ))}
+        {participants.map((participant) => {
+          const speaking = participant.id === 'alex' && localSpeaking;
+          return (
+            <article
+              className={`voice-member-card ${speaking ? 'voice-member-speaking' : ''}`}
+              key={participant.id}
+            >
+              <PersonAvatar
+                image={participant.id === 'alex' ? localAvatar : participant.avatar}
+                name={participant.name}
+                status="online"
+                size="large"
+              />
+              <span>
+                <strong>{participant.name}</strong>
+                <small>{speaking ? 'Speaking now' : 'Listening'}</small>
+              </span>
+              <Microphone size={16} weight="fill" />
+            </article>
+          );
+        })}
       </div>
       <div className="voice-sidebar-security">
         <LockSimple size={16} /> Encrypted media session
