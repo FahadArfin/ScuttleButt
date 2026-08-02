@@ -94,6 +94,8 @@ The typed administration/moderation policy foundation is implemented and tested 
 
 Only after local flows are stable: test multiple homeservers, cross-server identities, rooms, DMs, invites, outage behavior, allow/block lists, signing-key handling, and partial failures.
 
+The reusable Matrix federation policy boundary is implemented and tested in `@scuttlebutt/federation`, with a two-homeserver live-test runbook under `infrastructure/matrix-federation`. The live Synapse acceptance flow, authenticated operation wiring, and CI federation environment remain before this phase can be marked complete. See [the Phase 11 report](phase-11-report.md).
+
 ## Phase 12 — Production hardening
 
 Prepare security review, dependency and license audits, fuzz/load testing, backup/restore, privacy/accessibility review, observability, alerting, and upgrade tests.
