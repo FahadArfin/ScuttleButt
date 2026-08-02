@@ -9,6 +9,9 @@ import {
   type MatrixEvent,
 } from 'matrix-js-sdk';
 
+export { MatrixMessagingAdapter, mapMatrixTimelineEvent } from './messaging.js';
+export type { MatrixTimelineMessage } from './messaging.js';
+
 export interface MatrixSession {
   homeserverUrl: string;
   accessToken: string;

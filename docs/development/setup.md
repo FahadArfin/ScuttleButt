@@ -80,4 +80,4 @@ Build output is generated under package `dist/` directories and is ignored by Gi
 
 ## Phase boundary
 
-Phase 3 friend-code/contact domain work is in progress. Do not add the full messaging interface, communities, calls, uploads, desktop, mobile, or production deployment work to this task. Persistent contact storage and authenticated API wiring require their own acceptance criteria before this phase is complete.
+Phase 4 messaging interface work is complete. The default web preview uses a deterministic local repository while browser login/session restoration is wired to the Phase 2 Matrix client. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase. Persistent contact storage and authenticated API wiring require their own acceptance criteria before those boundaries are complete.

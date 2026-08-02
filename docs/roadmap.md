@@ -44,9 +44,11 @@ Add generation, normalization, lookup, QR/invite representations, contact reques
 
 The domain foundation is implemented and tested in `@scuttlebutt/friend-codes`. Persistent storage, authenticated platform API routes, and client UI remain before this phase can be marked complete. See [the Phase 3 report](phase-3-report.md).
 
-## Phase 4 — Messaging interface
+## Phase 4 — Messaging interface (complete)
 
 Build conversation list, timeline, composer, replies, edit/delete, reactions, attachments, typing/read states, drafts, notifications, accessibility, and retry flows over the Matrix client boundary.
+
+Acceptance checks passed on 2026-08-02. See [the Phase 4 report](phase-4-report.md). Browser session wiring and encrypted media transfer remain explicit integration boundaries.
 
 ## Phase 5 — Community servers and channels
 
