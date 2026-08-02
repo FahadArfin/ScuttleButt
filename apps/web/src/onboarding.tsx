@@ -3,12 +3,11 @@ import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'rea
 import { Camera, Check, ChatCenteredDots, UploadSimple } from '@phosphor-icons/react';
 
 import type { SignedInUser } from './auth.js';
+import { optimizeAvatar } from './image-utils.js';
 import { INTERESTS, RECOMMENDED_SERVERS } from './onboarding-data.js';
 import { GROUP_STORAGE_KEY } from './workspace.js';
 
 const PROFILE_STORAGE_KEY = 'scuttlebutt:profile:v2';
-const MAX_AVATAR_BYTES = 2_000_000;
-
 function words(value: string): number {
   return value.trim().split(/\s+/).filter(Boolean).length;
 }
@@ -60,16 +59,20 @@ export function OnboardingPage({
     setTagDraft('');
   };
 
-  const uploadAvatar = (event: ChangeEvent<HTMLInputElement>) => {
+  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > MAX_AVATAR_BYTES) {
-      setError('Choose a JPG, PNG, GIF, or WebP image under 2 MB.');
+    if (!file.type.startsWith('image/')) {
+      setError('Choose a JPG, PNG, GIF, or WebP image.');
       return;
     }
-    const reader = new FileReader();
-    reader.addEventListener('load', () => setAvatarUrl(String(reader.result)));
-    reader.readAsDataURL(file);
+    try {
+      setError('');
+      setAvatarUrl(await optimizeAvatar(file));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The image could not be prepared.');
+    }
   };
 
   const submit = async (event: FormEvent) => {

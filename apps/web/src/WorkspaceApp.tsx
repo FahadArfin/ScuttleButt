@@ -50,6 +50,7 @@ import { E2E_SELECTORS } from '@scuttlebutt/testing';
 
 import { MessageRow, PersonAvatar } from './App.js';
 import type { SignedInUser } from './auth.js';
+import { optimizeAvatar } from './image-utils.js';
 import {
   loadFriendState,
   respondToFriendRequest,
@@ -2120,7 +2121,7 @@ function ProfileSettingsDialog({
   const [error, setError] = useState('');
   const update = <Key extends keyof UserProfile>(key: Key, value: UserProfile[Key]) =>
     setDraft((current) => ({ ...current, [key]: value }));
-  const handleAvatar = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
     if (!file) return;
@@ -2128,18 +2129,12 @@ function ProfileSettingsDialog({
       setError('Choose a PNG, JPEG, GIF, or WebP image.');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Profile pictures must be smaller than 5 MB.');
-      return;
+    try {
+      update('avatar', await optimizeAvatar(file));
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The image could not be prepared.');
     }
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      if (typeof reader.result === 'string') {
-        update('avatar', reader.result);
-        setError('');
-      }
-    });
-    reader.readAsDataURL(file);
   };
   return (
     <div
@@ -2185,7 +2180,7 @@ function ProfileSettingsDialog({
                   Reset
                 </button>
               </div>
-              <small>PNG, JPEG, GIF, or WebP. Maximum 5 MB.</small>
+              <small>PNG, JPEG, GIF, or WebP. Large images are resized automatically to 2 MB.</small>
               {error ? <p role="alert">{error}</p> : null}
             </section>
             <label>
