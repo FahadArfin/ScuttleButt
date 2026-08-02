@@ -1799,6 +1799,21 @@ img {
   color: var(--accent);
 }
 
+.icon-button-danger[aria-pressed='true'] {
+  background: rgb(239 68 68 / 16%);
+  color: #ff5d68;
+}
+
+.icon-button-danger[aria-pressed='true']:focus-visible {
+  outline-color: #ff5d68;
+}
+
+.voice-control-active {
+  background: rgb(239 68 68 / 16%) !important;
+  border-color: rgb(255 93 104 / 45%) !important;
+  color: #ff5d68 !important;
+}
+
 @media (max-width: 1180px) {
   .voice-room-layout {
     grid-template-columns: 1fr;

@@ -82,16 +82,18 @@ function IconButton({
   label,
   onClick,
   pressed,
+  tone = 'default',
 }: {
   children: ReactNode;
   label: string;
   onClick?: () => void;
   pressed?: boolean;
+  tone?: 'danger' | 'default';
 }) {
   return (
     <button
       type="button"
-      className="icon-button"
+      className={`icon-button ${tone === 'danger' ? 'icon-button-danger' : ''}`}
       aria-label={label}
       aria-pressed={pressed}
       onClick={onClick}
@@ -422,6 +424,28 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
     );
   };
 
+  const joinVoiceChannel = (conversationId: string) => {
+    setGroups((current) =>
+      current.map((group) =>
+        group.id !== activeGroup?.id
+          ? group
+          : {
+              ...group,
+              channels: group.channels.map((channel) =>
+                channel.conversationId !== conversationId
+                  ? channel
+                  : {
+                      ...channel,
+                      participantIds: Array.from(new Set([...channel.participantIds, 'alex'])),
+                    },
+              ),
+            },
+      ),
+    );
+    selectConversation(conversationId, 'groups');
+    setNotice({ tone: 'info', text: 'Joined voice channel.' });
+  };
+
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
 
   return (
@@ -519,9 +543,10 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                 selectedConversationId={selectedConversationId}
                 onCreateText={() => setDialogMode('text-channel')}
                 onCreateVoice={() => setDialogMode('voice-channel')}
-                onSelect={(id) => selectConversation(id, 'groups')}
+                onJoinVoice={joinVoiceChannel}
+                onSelectText={(id) => selectConversation(id, 'groups')}
                 onStream={(id) => {
-                  selectConversation(id, 'groups');
+                  joinVoiceChannel(id);
                   setNotice({
                     tone: 'info',
                     text: '4K streaming selected. Quality adapts to bandwidth and device support.',
@@ -562,6 +587,7 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             <IconButton
               label={muted ? 'Unmute microphone' : 'Mute microphone'}
               pressed={muted}
+              tone="danger"
               onClick={() => setMuted((current) => !current)}
             >
               <Microphone size={18} />
@@ -569,6 +595,7 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
             <IconButton
               label={deafened ? 'Undeafen' : 'Deafen'}
               pressed={deafened}
+              tone="danger"
               onClick={() => setDeafened((current) => !current)}
             >
               <Headphones size={18} />
@@ -623,6 +650,8 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                     <div className="voice-room-layout">
                       <div className="voice-room-stage">
                         <VoicePreviewPanel
+                          key={selectedConversation.id}
+                          connected={selectedChannel?.participantIds.includes('alex') ?? false}
                           roomName={selectedChannel?.name ?? selectedConversation.title}
                           participants={(selectedChannel?.participantIds ?? [])
                             .map((id) => MEMBERS.find((member) => member.id === id))
@@ -897,14 +926,16 @@ function GroupNavigation({
   group,
   onCreateText,
   onCreateVoice,
-  onSelect,
+  onJoinVoice,
+  onSelectText,
   onStream,
   selectedConversationId,
 }: {
   group: WorkspaceGroup;
   onCreateText: () => void;
   onCreateVoice: () => void;
-  onSelect: (id: string) => void;
+  onJoinVoice: (id: string) => void;
+  onSelectText: (id: string) => void;
   onStream: (id: string) => void;
   selectedConversationId: string;
 }) {
@@ -921,14 +952,14 @@ function GroupNavigation({
         channels={group.channels.filter(({ kind }) => kind === 'text')}
         selectedConversationId={selectedConversationId}
         onCreate={onCreateText}
-        onSelect={onSelect}
+        onSelect={onSelectText}
         type="text"
       />
       <ChannelSection
         channels={group.channels.filter(({ kind }) => kind === 'voice')}
         selectedConversationId={selectedConversationId}
         onCreate={onCreateVoice}
-        onSelect={onSelect}
+        onSelect={onJoinVoice}
         onStream={onStream}
         type="voice"
       />

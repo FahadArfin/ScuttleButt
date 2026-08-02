@@ -36,12 +36,25 @@ test('opens the voice proof-of-concept controls for a voice channel', async ({ p
     'disabled',
     '',
   );
-  await page.getByRole('button', { name: 'Join voice preview' }).click();
   await expect(page.getByText('connected', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Mute' }).click();
   await expect(page.getByRole('button', { name: 'Unmute' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Meeting chat' })).toBeVisible();
   await expect(page.getByLabel('Engineering Room participants')).toContainText('Alex Rivers');
+});
+
+test('shows red active states for mute and deafen', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Mute microphone' }).click();
+  const unmute = page.getByRole('button', { name: 'Unmute microphone' });
+  await expect(unmute).toHaveAttribute('aria-pressed', 'true');
+  await expect(unmute).toHaveCSS('color', 'rgb(255, 93, 104)');
+
+  await page.getByRole('button', { name: 'Deafen' }).click();
+  const undeafen = page.getByRole('button', { name: 'Undeafen' });
+  await expect(undeafen).toHaveAttribute('aria-pressed', 'true');
+  await expect(undeafen).toHaveCSS('color', 'rgb(255, 93, 104)');
 });
 
 test('separates DMs from groups and creates local channels', async ({ page }) => {

@@ -29,15 +29,19 @@ const INITIAL_PREVIEW: VoiceSessionSnapshot = {
 };
 
 export function VoicePreviewPanel({
+  connected = false,
   onConnectionChange,
   participants = [],
   roomName,
 }: {
+  connected?: boolean;
   onConnectionChange?: (connected: boolean) => void;
   participants?: Array<{ identity: string; name: string }>;
   roomName: string;
 }) {
-  const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(INITIAL_PREVIEW);
+  const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(() =>
+    connected ? { ...INITIAL_PREVIEW, roomName, state: 'connected' } : INITIAL_PREVIEW,
+  );
   const isConnected = snapshot.state === 'connected' || snapshot.state === 'reconnecting';
 
   const joinPreview = () => {
