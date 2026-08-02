@@ -115,7 +115,7 @@ function avatarForMessage(message: Message): string {
   if (name.includes('sam')) return AVATARS.sam;
   if (name.includes('priya')) return AVATARS.priya;
   if (name.includes('alex') || message.own) return AVATARS.alex;
-  return '/scuttlebutt-mark.webp';
+  return '';
 }
 
 function formatFileSize(size: number): string {
@@ -155,14 +155,20 @@ export function PersonAvatar({
   status,
   size = 'medium',
 }: {
-  image: string;
+  image?: string | null;
   name: string;
   status?: Member['status'];
   size?: 'large' | 'medium' | 'small';
 }) {
   return (
     <span className={`person-avatar person-avatar-${size}`}>
-      <img src={image} alt="" />
+      {image ? (
+        <img src={image} alt="" />
+      ) : (
+        <span className="person-avatar-fallback" aria-hidden="true">
+          {name.trim().charAt(0).toUpperCase() || '?'}
+        </span>
+      )}
       {status ? <span className={`presence-dot presence-${status}`} aria-label={status} /> : null}
       <span className="visually-hidden">{name}</span>
     </span>

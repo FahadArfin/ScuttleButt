@@ -72,7 +72,6 @@ import {
   type VoiceQuickAction,
 } from './voice-preview.js';
 import {
-  AVATARS,
   DM_STORAGE_KEY,
   GROUP_STORAGE_KEY,
   conversationForChannel,
@@ -111,7 +110,7 @@ interface UserProfile {
 
 function loadProfile(user: SignedInUser): UserProfile {
   const fallback: UserProfile = {
-    avatar: user.avatarUrl ?? '/scuttlebutt-mark.webp',
+    avatar: user.avatarUrl ?? '',
     bannerColor: user.backgroundColor,
     bio: user.bio,
     displayName: user.name,
@@ -1273,7 +1272,7 @@ function DirectMessageNavigation({
               onClick={() => onSelect(conversation.id)}
             >
               <PersonAvatar
-                image={conversation.avatarUrl ?? '/scuttlebutt-mark.webp'}
+                image={conversation.avatarUrl}
                 name={conversation.title}
                 status="online"
                 size="small"
@@ -1485,7 +1484,7 @@ function ConversationHeader({
       <div className="conversation-header-title">
         {selectedConversation.kind === 'direct' ? (
           <PersonAvatar
-            image={AVATARS.maya}
+            image={selectedConversation.avatarUrl}
             name={selectedConversation.title}
             status="online"
             size="small"
@@ -1821,7 +1820,7 @@ function LandingPanel({
                 {friendState.incoming.map((friend) => (
                   <article className="friend-request-row" key={friend.id}>
                     <PersonAvatar
-                      image={friend.avatarUrl ?? '/scuttlebutt-mark.webp'}
+                      image={friend.avatarUrl}
                       name={friend.name}
                       status="online"
                     />
@@ -1846,7 +1845,7 @@ function LandingPanel({
               <div className="friend-list-grid">
                 {friendState.friends.map((friend) => (
                   <article className="friend-list-card" key={friend.id}>
-                    <PersonAvatar image={friend.avatarUrl ?? '/scuttlebutt-mark.webp'} name={friend.name} status="online" />
+                    <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
                     <span><strong>{friend.name}</strong><small>{friend.bio || 'Friend'}</small></span>
                     <ChatCenteredDots size={19} />
                   </article>
@@ -1991,7 +1990,7 @@ function ProfileSettingsDialog({
                     onChange={handleAvatar}
                   />
                 </label>
-                <button type="button" onClick={() => update('avatar', AVATARS.alex)}>
+                <button type="button" onClick={() => update('avatar', '')}>
                   Reset
                 </button>
               </div>
