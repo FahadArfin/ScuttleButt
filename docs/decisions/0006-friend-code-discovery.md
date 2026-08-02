@@ -24,7 +24,7 @@ QR codes and invitation links carry the friend code or an expiring invitation to
 
 ## Phase 3 foundation behavior
 
-- Codes use a 32-symbol human-safe alphabet that excludes ambiguous characters, with 16 symbols (80 bits of entropy) per code.
+- Codes use a 32-symbol human-safe alphabet that excludes ambiguous characters, with 6 symbols for a memorable Discord-style code. Because this is a discovery code rather than an authentication secret, lookup is aggressively rate-limited, duplicate issuance is rejected, and the recipient must explicitly approve every request.
 - Input is normalized with Unicode compatibility normalization, case folding, and removal of spaces/hyphens before exact lookup.
 - The in-memory Phase 3 store keeps an HMAC-SHA-256 digest, not the raw code. The HMAC key must contain at least 32 bytes and is supplied by the service owner.
 - Code submission always returns the same shaped accepted-for-processing response and never returns the target Matrix ID. Unknown, malformed, revoked, self, duplicate, and blocked codes create no actionable request.

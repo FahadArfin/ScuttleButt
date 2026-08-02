@@ -1,0 +1,11 @@
+.git
+.turbo
+**/node_modules
+**/dist
+**/coverage
+infrastructure/matrix/postgres
+.env
+.env.*
+!.env.example
+design-qa.md
+

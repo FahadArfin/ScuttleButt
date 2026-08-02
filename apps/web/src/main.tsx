@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/inter';
 
 import { WorkspaceApp as App } from './WorkspaceApp';
+import { AuthGate } from './auth';
 import './styles.css';
 
 const rootElement = document.getElementById('root');
@@ -13,6 +14,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <AuthGate>
+      <App />
+    </AuthGate>
   </StrictMode>,
 );

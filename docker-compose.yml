@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: scuttlebutt
+      POSTGRES_USER: scuttlebutt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-scuttlebutt-password}
+    ports:
+      - '5433:5432'
+    volumes:
+      - scuttlebutt-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U scuttlebutt']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    command: -c /etc/coturn/turnserver.conf
+    ports:
+      - '3478:3478'
+      - '3478:3478/udp'
+      - '49152-49200:49152-49200/udp'
+    volumes:
+      - ./infrastructure/livekit/turnserver.conf:/etc/coturn/turnserver.conf:ro
+
+  livekit:
+    image: livekit/livekit-server:v1.9.0
+    depends_on: [redis, coturn]
+    command: --config /etc/livekit/livekit.yaml
+    ports:
+      - '7880:7880'
+      - '7881:7881'
+      - '7882:7882/udp'
+      - '50000-50010:50000-50010/udp'
+    volumes:
+      - ./infrastructure/livekit/livekit.yaml:/etc/livekit/livekit.yaml:ro
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 8080
+      WEB_ORIGIN: http://localhost:8080
+      DATABASE_URL: postgresql://scuttlebutt:${POSTGRES_PASSWORD:-local-scuttlebutt-password}@postgres:5432/scuttlebutt
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      LIVEKIT_URL: ws://localhost:7880
+    ports:
+      - '8080:8080'
+
+volumes:
+  scuttlebutt-postgres:

@@ -5,6 +5,9 @@ export interface RuntimeConfig {
   apiPort: number;
   environment: RuntimeEnvironment;
   webOrigin: string;
+  databaseUrl?: string;
+  googleClientId?: string;
+  staticDirectory?: string;
 }
 
 function parsePort(value: string): number {
@@ -31,5 +34,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     apiPort: parsePort(env.API_PORT ?? env.PORT ?? '3001'),
     environment: parseEnvironment(env.NODE_ENV ?? 'development'),
     webOrigin: env.WEB_ORIGIN ?? 'http://localhost:5173',
+    databaseUrl: env.DATABASE_URL,
+    googleClientId: env.GOOGLE_CLIENT_ID,
+    staticDirectory: env.STATIC_DIR,
   };
 }

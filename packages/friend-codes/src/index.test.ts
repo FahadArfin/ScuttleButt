@@ -19,30 +19,30 @@ function createService(now = () => 1_000): FriendCodeService {
 
 describe('friend-code primitives', () => {
   it('normalizes grouped and case-insensitive codes', () => {
-    expect(normalizeFriendCode('abcd-efgh-jklm-npqr')).toBe('ABCDEFGHJKLMNPQR');
-    expect(formatFriendCode('ABCDEFGHJKLMNPQR')).toBe('ABCD-EFGH-JKLM-NPQR');
+    expect(normalizeFriendCode('abc-def')).toBe('ABCDEF');
+    expect(formatFriendCode('ABCDEF')).toBe('ABC-DEF');
   });
 
   it('rejects ambiguous or malformed characters', () => {
-    expect(() => normalizeFriendCode('ABCD-EFGH-IJKL-MNOP')).toThrow();
-    expect(() => normalizeFriendCode('ABCD-EFGH-JKLM-NP')).toThrow();
+    expect(() => normalizeFriendCode('ABC-IJK')).toThrow();
+    expect(() => normalizeFriendCode('ABC-DE')).toThrow();
   });
 
   it('uses a keyed digest and rejects short secrets', () => {
-    expect(digestFriendCode(secret, 'ABCDEFGHJKLMNPQR')).not.toContain('ABCDEFGHJKLMNPQR');
-    expect(() => digestFriendCode('too-short', 'ABCDEFGHJKLMNPQR')).toThrow(
+    expect(digestFriendCode(secret, 'ABCDEF')).not.toContain('ABCDEF');
+    expect(() => digestFriendCode('too-short', 'ABCDEF')).toThrow(
       'Friend-code secret must contain at least 32 bytes.',
     );
   });
 
   it('creates and parses an invitation URL that carries only the friend code', () => {
-    const invite = createFriendInvite('https://scuttlebutt.example', 'abcd-efgh-jklm-npqr');
+    const invite = createFriendInvite('https://scuttlebutt.example', 'abc-def');
 
     expect(invite).toEqual({
-      displayCode: 'ABCD-EFGH-JKLM-NPQR',
-      url: 'https://scuttlebutt.example/invite/friend?code=ABCD-EFGH-JKLM-NPQR',
+      displayCode: 'ABC-DEF',
+      url: 'https://scuttlebutt.example/invite/friend?code=ABC-DEF',
     });
-    expect(parseFriendInviteUrl(invite.url)).toBe('ABCD-EFGH-JKLM-NPQR');
+    expect(parseFriendInviteUrl(invite.url)).toBe('ABC-DEF');
     expect(() => parseFriendInviteUrl('https://scuttlebutt.example/invite/friend')).toThrow(
       'Invalid friend invite link.',
     );

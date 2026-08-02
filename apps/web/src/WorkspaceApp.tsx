@@ -14,7 +14,7 @@ import {
   ChatCenteredDots,
   Code,
   Compass,
-  Desktop,
+  Copy,
   FileText,
   GearSix,
   Hash,
@@ -33,6 +33,7 @@ import {
   Smiley,
   SpeakerHigh,
   Star,
+  UserPlus,
   Users,
   Waveform,
   X,
@@ -76,6 +77,20 @@ interface Notice {
 }
 
 const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
+const FRIEND_CODE_STORAGE_KEY = 'scuttlebutt:friend-code';
+const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function loadFriendCode(): string {
+  const stored = window.localStorage.getItem(FRIEND_CODE_STORAGE_KEY);
+  if (stored) return stored;
+  const values = crypto.getRandomValues(new Uint8Array(6));
+  const code = Array.from(
+    values,
+    (value) => FRIEND_CODE_ALPHABET[value % FRIEND_CODE_ALPHABET.length],
+  ).join('');
+  window.localStorage.setItem(FRIEND_CODE_STORAGE_KEY, code);
+  return code;
+}
 
 function IconButton({
   children,
@@ -137,6 +152,9 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [voiceChatOpen, setVoiceChatOpen] = useState(false);
+  const [friendDialogOpen, setFriendDialogOpen] = useState(false);
+  const [friendCode] = useState(loadFriendCode);
 
   const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
   const directMessages = conversations.filter(({ kind }) => kind === 'direct');
@@ -146,6 +164,7 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
   );
   const showConversation =
     Boolean(selectedConversation) && (activeSurface === 'dms' || activeSurface === 'groups');
+  const isVoiceConversation = selectedConversation?.channelKind === 'voice';
   const showMembers = membersVisible && activeSurface === 'groups' && showConversation;
   const filteredMessages = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -443,7 +462,41 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
       ),
     );
     selectConversation(conversationId, 'groups');
+    setVoiceChatOpen(false);
     setNotice({ tone: 'info', text: 'Joined voice channel.' });
+  };
+
+  const addFriendByCode = async (rawCode: string) => {
+    const code = rawCode.replace(/[\s-]/g, '').toUpperCase();
+    if (!new RegExp(`^[${FRIEND_CODE_ALPHABET}]{6}$`).test(code)) {
+      setNotice({ tone: 'error', text: 'Enter a valid 6-character friend code.' });
+      return;
+    }
+    if (code === friendCode) {
+      setNotice({ tone: 'error', text: 'That is your own friend code.' });
+      return;
+    }
+    const conversation: Conversation = {
+      id: `friend-${code.toLowerCase()}`,
+      title: `Friend ${code}`,
+      kind: 'direct',
+      avatarLabel: code.slice(0, 2),
+      presence: 'Friend request sent',
+      preview: 'Start a private conversation when they accept.',
+      updatedAt: 'Now',
+      unreadCount: 0,
+      encrypted: true,
+      members: 2,
+    };
+    await repository.createConversation(conversation);
+    setCustomDms((current) =>
+      current.some(({ id }) => id === conversation.id) ? current : [...current, conversation],
+    );
+    await refreshConversations();
+    setFriendDialogOpen(false);
+    setActiveSurface('dms');
+    setSelectedConversationId(conversation.id);
+    setNotice({ tone: 'info', text: `Friend request sent to ${code}.` });
   };
 
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
@@ -545,13 +598,6 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                 onCreateVoice={() => setDialogMode('voice-channel')}
                 onJoinVoice={joinVoiceChannel}
                 onSelectText={(id) => selectConversation(id, 'groups')}
-                onStream={(id) => {
-                  joinVoiceChannel(id);
-                  setNotice({
-                    tone: 'info',
-                    text: '4K streaming selected. Quality adapts to bandwidth and device support.',
-                  });
-                }}
               />
             ) : null}
 
@@ -607,6 +653,12 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
               <div className="profile-popover" role="dialog" aria-label="Profile menu">
                 <strong>Alex Rivers</strong>
                 <span>Local demo account</span>
+                <span className="profile-friend-code">
+                  Friend code <b>{friendCode}</b>
+                </span>
+                <button type="button" onClick={() => setFriendDialogOpen(true)}>
+                  <UserPlus size={16} /> Add a friend
+                </button>
                 <button
                   type="button"
                   onClick={() =>
@@ -636,6 +688,8 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                   setNotice({ tone: 'info', text: 'There are no pinned messages yet.' })
                 }
                 onSearch={setSearch}
+                onVoiceChatToggle={() => setVoiceChatOpen((open) => !open)}
+                voiceChatOpen={voiceChatOpen}
               />
 
               <div className="conversation-body">
@@ -656,46 +710,14 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                           participants={(selectedChannel?.participantIds ?? [])
                             .map((id) => MEMBERS.find((member) => member.id === id))
                             .filter((member): member is WorkspaceMember => Boolean(member))
-                            .map((member) => ({ identity: member.id, name: member.name }))}
+                            .map((member) => ({
+                              avatar: member.avatar,
+                              identity: member.id,
+                              name: member.name,
+                            }))}
                           onConnectionChange={updateVoiceConnection}
                         />
                       </div>
-                      <section className="meeting-chat-panel" aria-label="Meeting chat">
-                        <header>
-                          <ChatCenteredDots size={18} />
-                          <div>
-                            <strong>Meeting chat</strong>
-                            <span>Messages remain after the call ends.</span>
-                          </div>
-                        </header>
-                        <div className="meeting-chat-messages">
-                          <MessageList
-                            composer={composer}
-                            editingMessage={editingMessage}
-                            isLoading={isLoading}
-                            messages={filteredMessages}
-                            onDelete={(message) => void handleDelete(message)}
-                            onEdit={(message) => {
-                              setEditingMessage(message);
-                              setReplyTo(undefined);
-                              setComposer(message.body);
-                            }}
-                            onReact={(message, emoji) => void handleReact(message, emoji)}
-                            onReply={(message) =>
-                              setReplyTo({
-                                id: message.id,
-                                author: message.senderName,
-                                body: message.body,
-                              })
-                            }
-                            onRetry={(message) =>
-                              void repository
-                                .retryMessage(selectedConversationId, message.id)
-                                .then(refreshMessages)
-                            }
-                          />
-                        </div>
-                      </section>
                     </div>
                   ) : (
                     <MessageList
@@ -735,30 +757,32 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
                   </p>
                 ) : null}
 
-                <Composer
-                  activeChannelName={activeChannelName}
-                  attachments={attachments}
-                  composer={composer}
-                  editingMessage={editingMessage}
-                  isLoading={isLoading}
-                  isSending={isSending}
-                  replyTo={replyTo}
-                  onCancelContext={() => {
-                    setEditingMessage(undefined);
-                    setReplyTo(undefined);
-                    if (editingMessage) setComposer('');
-                  }}
-                  onChange={setComposer}
-                  onFiles={handleFiles}
-                  onInsert={(value) =>
-                    setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
-                  }
-                  onKeyDown={handleComposerKeyDown}
-                  onRemoveAttachment={(id) =>
-                    setAttachments((current) => current.filter((item) => item.id !== id))
-                  }
-                  onSubmit={handleSubmit}
-                />
+                {!isVoiceConversation ? (
+                  <Composer
+                    activeChannelName={activeChannelName}
+                    attachments={attachments}
+                    composer={composer}
+                    editingMessage={editingMessage}
+                    isLoading={isLoading}
+                    isSending={isSending}
+                    replyTo={replyTo}
+                    onCancelContext={() => {
+                      setEditingMessage(undefined);
+                      setReplyTo(undefined);
+                      if (editingMessage) setComposer('');
+                    }}
+                    onChange={setComposer}
+                    onFiles={handleFiles}
+                    onInsert={(value) =>
+                      setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
+                    }
+                    onKeyDown={handleComposerKeyDown}
+                    onRemoveAttachment={(id) =>
+                      setAttachments((current) => current.filter((item) => item.id !== id))
+                    }
+                    onSubmit={handleSubmit}
+                  />
+                ) : null}
               </div>
             </>
           ) : (
@@ -767,12 +791,66 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
               surface={activeSurface}
               onCreateDm={() => setDialogMode('dm')}
               onCreateGroup={() => setDialogMode('group')}
+              friendCode={friendCode}
+              onAddFriend={() => setFriendDialogOpen(true)}
               onOpenGroup={openGroup}
             />
           )}
         </section>
 
-        {showMembers ? <MembersSidebar onNotice={setNotice} /> : null}
+        {showMembers && isVoiceConversation ? (
+          voiceChatOpen ? (
+            <VoiceChatSidebar
+              activeChannelName={activeChannelName}
+              attachments={attachments}
+              composer={composer}
+              editingMessage={editingMessage}
+              isLoading={isLoading}
+              isSending={isSending}
+              messages={filteredMessages}
+              replyTo={replyTo}
+              onClose={() => setVoiceChatOpen(false)}
+              onDelete={(message) => void handleDelete(message)}
+              onEdit={(message) => {
+                setEditingMessage(message);
+                setReplyTo(undefined);
+                setComposer(message.body);
+              }}
+              onReact={(message, emoji) => void handleReact(message, emoji)}
+              onReply={(message) =>
+                setReplyTo({ id: message.id, author: message.senderName, body: message.body })
+              }
+              onRetry={(message) =>
+                void repository
+                  .retryMessage(selectedConversationId, message.id)
+                  .then(refreshMessages)
+              }
+              onCancelContext={() => {
+                setEditingMessage(undefined);
+                setReplyTo(undefined);
+                if (editingMessage) setComposer('');
+              }}
+              onChange={setComposer}
+              onFiles={handleFiles}
+              onInsert={(value) =>
+                setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
+              }
+              onKeyDown={handleComposerKeyDown}
+              onRemoveAttachment={(id) =>
+                setAttachments((current) => current.filter((item) => item.id !== id))
+              }
+              onSubmit={handleSubmit}
+            />
+          ) : (
+            <VoiceMembersSidebar
+              participants={(selectedChannel?.participantIds ?? [])
+                .map((id) => MEMBERS.find((member) => member.id === id))
+                .filter((member): member is WorkspaceMember => Boolean(member))}
+            />
+          )
+        ) : showMembers ? (
+          <MembersSidebar onNotice={setNotice} />
+        ) : null}
       </section>
 
       {dialogMode ? (
@@ -781,6 +859,13 @@ export function WorkspaceApp({ repository: repositoryProp }: WorkspaceAppProps =
           groupName={activeGroup?.name}
           onCancel={() => setDialogMode(undefined)}
           onCreate={(name) => void createFromDialog(name)}
+        />
+      ) : null}
+      {friendDialogOpen ? (
+        <FriendCodeDialog
+          friendCode={friendCode}
+          onCancel={() => setFriendDialogOpen(false)}
+          onSubmit={(code) => void addFriendByCode(code)}
         />
       ) : null}
     </main>
@@ -928,7 +1013,6 @@ function GroupNavigation({
   onCreateVoice,
   onJoinVoice,
   onSelectText,
-  onStream,
   selectedConversationId,
 }: {
   group: WorkspaceGroup;
@@ -936,7 +1020,6 @@ function GroupNavigation({
   onCreateVoice: () => void;
   onJoinVoice: (id: string) => void;
   onSelectText: (id: string) => void;
-  onStream: (id: string) => void;
   selectedConversationId: string;
 }) {
   return (
@@ -960,7 +1043,6 @@ function GroupNavigation({
         selectedConversationId={selectedConversationId}
         onCreate={onCreateVoice}
         onSelect={onJoinVoice}
-        onStream={onStream}
         type="voice"
       />
     </>
@@ -971,14 +1053,12 @@ function ChannelSection({
   channels,
   onCreate,
   onSelect,
-  onStream,
   selectedConversationId,
   type,
 }: {
   channels: WorkspaceChannel[];
   onCreate: () => void;
   onSelect: (conversationId: string) => void;
-  onStream?: (conversationId: string) => void;
   selectedConversationId: string;
   type: 'text' | 'voice';
 }) {
@@ -1050,14 +1130,6 @@ function ChannelSection({
                 ))}
               </div>
             ) : null}
-            <div className="voice-channel-actions">
-              <button type="button" onClick={() => onStream?.(channel.conversationId)}>
-                <Desktop size={15} /> Stream 4K
-              </button>
-              <button type="button" onClick={() => onSelect(channel.conversationId)}>
-                Open
-              </button>
-            </div>
           </div>
         );
       })}
@@ -1074,8 +1146,10 @@ function ConversationHeader({
   onNotificationsToggle,
   onPinned,
   onSearch,
+  onVoiceChatToggle,
   search,
   selectedConversation,
+  voiceChatOpen,
 }: {
   activeChannelName: string;
   activeGroup?: WorkspaceGroup;
@@ -1085,8 +1159,10 @@ function ConversationHeader({
   onNotificationsToggle: () => void;
   onPinned: () => void;
   onSearch: (value: string) => void;
+  onVoiceChatToggle: () => void;
   search: string;
   selectedConversation: Conversation;
+  voiceChatOpen: boolean;
 }) {
   return (
     <header className="conversation-header">
@@ -1122,6 +1198,15 @@ function ConversationHeader({
         </div>
       </div>
       <div className="conversation-header-actions">
+        {selectedConversation.channelKind === 'voice' ? (
+          <IconButton
+            label={voiceChatOpen ? 'Close voice chat' : 'Open voice chat'}
+            pressed={voiceChatOpen}
+            onClick={onVoiceChatToggle}
+          >
+            <ChatCenteredDots size={20} weight="fill" />
+          </IconButton>
+        ) : null}
         <IconButton
           label={notificationsEnabled ? 'Mute notifications' : 'Enable notifications'}
           pressed={notificationsEnabled}
@@ -1343,13 +1428,17 @@ function Composer({
 }
 
 function LandingPanel({
+  friendCode,
   groups,
+  onAddFriend,
   onCreateDm,
   onCreateGroup,
   onOpenGroup,
   surface,
 }: {
+  friendCode: string;
   groups: WorkspaceGroup[];
+  onAddFriend: () => void;
   onCreateDm: () => void;
   onCreateGroup: () => void;
   onOpenGroup: (groupId: string) => void;
@@ -1393,6 +1482,26 @@ function LandingPanel({
         </div>
       ) : (
         <div className="landing-card-grid">
+          {!isExplore ? (
+            <article className="landing-card friend-code-card">
+              <span className="landing-card-icon">
+                <UserPlus size={23} />
+              </span>
+              <strong>Add friends by code</strong>
+              <span className="friend-code-value">{friendCode}</span>
+              <div className="friend-code-actions">
+                <button
+                  type="button"
+                  onClick={() => void navigator.clipboard.writeText(friendCode)}
+                >
+                  <Copy size={16} /> Copy
+                </button>
+                <button type="button" onClick={onAddFriend}>
+                  <UserPlus size={16} /> Add friend
+                </button>
+              </div>
+            </article>
+          ) : null}
           {groups.map((group) => (
             <button
               type="button"
@@ -1421,6 +1530,201 @@ function LandingPanel({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function VoiceMembersSidebar({ participants }: { participants: WorkspaceMember[] }) {
+  return (
+    <aside className="members-sidebar voice-members-sidebar" aria-label="Voice channel members">
+      <div className="voice-sidebar-heading">
+        <SpeakerHigh size={19} weight="fill" />
+        <div>
+          <strong>In this call</strong>
+          <span>{participants.length} connected</span>
+        </div>
+      </div>
+      <div className="voice-member-list">
+        {participants.map((participant, index) => (
+          <article
+            className={`voice-member-card ${index === 0 ? 'voice-member-speaking' : ''}`}
+            key={participant.id}
+          >
+            <PersonAvatar
+              image={participant.avatar}
+              name={participant.name}
+              status="online"
+              size="large"
+            />
+            <span>
+              <strong>{participant.name}</strong>
+              <small>{index === 0 ? 'Speaking now' : 'Listening'}</small>
+            </span>
+            <Microphone size={16} weight="fill" />
+          </article>
+        ))}
+      </div>
+      <div className="voice-sidebar-security">
+        <LockSimple size={16} /> Encrypted media session
+      </div>
+    </aside>
+  );
+}
+
+function VoiceChatSidebar({
+  activeChannelName,
+  attachments,
+  composer,
+  editingMessage,
+  isLoading,
+  isSending,
+  messages,
+  onCancelContext,
+  onChange,
+  onClose,
+  onDelete,
+  onEdit,
+  onFiles,
+  onInsert,
+  onKeyDown,
+  onReact,
+  onRemoveAttachment,
+  onReply,
+  onRetry,
+  onSubmit,
+  replyTo,
+}: {
+  activeChannelName: string;
+  attachments: AttachmentDraft[];
+  composer: string;
+  editingMessage?: Message;
+  isLoading: boolean;
+  isSending: boolean;
+  messages: Message[];
+  onCancelContext: () => void;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onDelete: (message: Message) => void;
+  onEdit: (message: Message) => void;
+  onFiles: (event: ChangeEvent<HTMLInputElement>) => void;
+  onInsert: (value: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onReact: (message: Message, emoji: string) => void;
+  onRemoveAttachment: (id: string) => void;
+  onReply: (message: Message) => void;
+  onRetry: (message: Message) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  replyTo?: ReplyReference;
+}) {
+  return (
+    <aside className="voice-chat-sidebar" aria-label={`${activeChannelName} voice chat`}>
+      <header>
+        <ChatCenteredDots size={19} weight="fill" />
+        <div>
+          <strong>{activeChannelName}</strong>
+          <span>Voice channel chat</span>
+        </div>
+        <button type="button" aria-label="Close voice chat" onClick={onClose}>
+          <X size={18} />
+        </button>
+      </header>
+      <div className="voice-chat-messages">
+        <MessageList
+          composer={composer}
+          editingMessage={editingMessage}
+          isLoading={isLoading}
+          messages={messages}
+          onDelete={onDelete}
+          onEdit={onEdit}
+          onReact={onReact}
+          onReply={onReply}
+          onRetry={onRetry}
+        />
+      </div>
+      <Composer
+        activeChannelName={activeChannelName}
+        attachments={attachments}
+        composer={composer}
+        editingMessage={editingMessage}
+        isLoading={isLoading}
+        isSending={isSending}
+        replyTo={replyTo}
+        onCancelContext={onCancelContext}
+        onChange={onChange}
+        onFiles={onFiles}
+        onInsert={onInsert}
+        onKeyDown={onKeyDown}
+        onRemoveAttachment={onRemoveAttachment}
+        onSubmit={onSubmit}
+      />
+    </aside>
+  );
+}
+
+function FriendCodeDialog({
+  friendCode,
+  onCancel,
+  onSubmit,
+}: {
+  friendCode: string;
+  onCancel: () => void;
+  onSubmit: (code: string) => void;
+}) {
+  const [code, setCode] = useState('');
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <form
+        className="creation-dialog friend-code-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="friend-code-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit(code);
+        }}
+      >
+        <div className="creation-dialog-heading">
+          <div>
+            <p className="section-kicker">Friends</p>
+            <h2 id="friend-code-title">Add a friend</h2>
+          </div>
+          <button type="button" aria-label="Close dialog" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <p>
+          Enter their private six-character code. They will receive a request before you can message
+          each other.
+        </p>
+        <label>
+          <span>Friend code</span>
+          <input
+            autoFocus
+            maxLength={6}
+            value={code}
+            onChange={(event) =>
+              setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+            }
+            placeholder="A7K9Q2"
+          />
+        </label>
+        <div className="your-friend-code">
+          <span>Your code</span>
+          <strong>{friendCode}</strong>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(friendCode)}>
+            <Copy size={16} /> Copy
+          </button>
+        </div>
+        <div className="creation-dialog-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={code.length !== 6}>
+            Send request
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

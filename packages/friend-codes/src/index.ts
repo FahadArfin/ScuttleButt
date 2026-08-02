@@ -1,8 +1,8 @@
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 
 export const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' as const;
-export const FRIEND_CODE_LENGTH = 16 as const;
-export const FRIEND_CODE_GROUP_LENGTH = 4 as const;
+export const FRIEND_CODE_LENGTH = 6 as const;
+export const FRIEND_CODE_GROUP_LENGTH = 3 as const;
 export const DEFAULT_LOOKUP_LIMIT = 5 as const;
 export const DEFAULT_LOOKUP_WINDOW_MS = 60_000 as const;
 
@@ -107,7 +107,7 @@ export function normalizeFriendCode(value: string): string {
   const alphabet = new RegExp(`^[${FRIEND_CODE_ALPHABET}]{${FRIEND_CODE_LENGTH}}$`);
 
   if (!alphabet.test(normalized)) {
-    throw new Error('Friend code must contain exactly 16 valid characters.');
+    throw new Error('Friend code must contain exactly 6 valid characters.');
   }
 
   return normalized;
@@ -198,6 +198,10 @@ export class InMemoryFriendCodeStore {
   getActiveCode(digest: string): StoredFriendCode | undefined {
     const code = this.codes.get(digest);
     return code && code.revokedAt === null ? { ...code } : undefined;
+  }
+
+  hasCodeDigest(digest: string): boolean {
+    return this.codes.has(digest);
   }
 
   getCodeForOwner(principalId: string): StoredFriendCode | undefined {
@@ -319,9 +323,15 @@ export class FriendCodeService {
     this.store.saveIdentity(owner);
     this.store.revokeCodesForOwner(owner.principalId, issuedAt);
 
-    const normalizedCode = randomFriendCode();
+    let normalizedCode = randomFriendCode();
+    let digest = digestFriendCode(this.options.secret, normalizedCode);
+    for (let attempt = 0; this.store.hasCodeDigest(digest) && attempt < 20; attempt += 1) {
+      normalizedCode = randomFriendCode();
+      digest = digestFriendCode(this.options.secret, normalizedCode);
+    }
+    if (this.store.hasCodeDigest(digest)) throw new Error('Unable to issue a unique friend code.');
     this.store.saveCode({
-      digest: digestFriendCode(this.options.secret, normalizedCode),
+      digest,
       issuedAt,
       matrixUserId: owner.matrixUserId,
       ownerPrincipalId: owner.principalId,

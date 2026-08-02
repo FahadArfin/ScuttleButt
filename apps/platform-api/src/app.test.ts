@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildApp } from './app';
+import { buildApp } from './app.js';
 
 describe('platform API', () => {
   it('returns a typed health response', async () => {
