@@ -76,6 +76,8 @@ this phase can be marked complete.
 
 Add Tauri login/session storage, notifications, tray, deep links, screen capture, device selection, push-to-talk foundation, and desktop diagnostics. Do not add unsigned auto-update behavior.
 
+The Tauri shell, OS-keychain session boundary, capability allowlist, tray, deep-link validation, push-to-talk command, notification command, and diagnostics contract are implemented as a foundation. Native compilation/runtime validation and authenticated Matrix login/restore UI wiring remain. See [the Phase 8 report](phase-8-report.md).
+
 ## Phase 9 — Media and profile features
 
 Add policy-controlled image/video uploads, thumbnails, GIF provider abstraction, animated profiles, custom emoji/stickers, quotas, and cleanup jobs.

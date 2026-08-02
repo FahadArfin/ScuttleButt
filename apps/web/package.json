@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@scuttlebutt/community": "workspace:*",
+    "@scuttlebutt/desktop-bridge": "workspace:*",
     "@scuttlebutt/livekit-client": "workspace:*",
     "@scuttlebutt/shared-types": "workspace:*",
     "@scuttlebutt/testing": "workspace:*",

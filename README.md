@@ -4,7 +4,7 @@ Scuttlebutt is planned as an open-source, self-hosted communication app with fed
 
 ## Project status
 
-Phase 7 video and screen-sharing foundation is in progress. Phase 6 voice proof-of-concept and Phase 5 community-server/channel mapping are available as tested foundations; live media validation, browser session wiring, and persistent contact API routes remain intentionally staged.
+Phase 8 desktop foundation is in progress. Phase 7 video and screen-sharing, Phase 6 voice proof-of-concept, and Phase 5 community-server/channel mapping are available as tested foundations; native runtime validation, browser session wiring, and persistent contact API routes remain intentionally staged.
 
 Start with:
 
@@ -24,6 +24,7 @@ Start with:
 - [Phase 5 report](docs/phase-5-report.md)
 - [Phase 6 report](docs/phase-6-report.md)
 - [Phase 7 report](docs/phase-7-report.md)
+- [Phase 8 report](docs/phase-8-report.md)
 - [Local LiveKit/Coturn environment](infrastructure/livekit/README.md)
 
 ## Development
@@ -45,17 +46,20 @@ pnpm check
 pnpm build
 pnpm test:e2e
 
+pnpm desktop:dev
+pnpm desktop:build
+
 pnpm matrix:prepare
 pnpm matrix:up
 pnpm matrix:test
 ```
 
 The API health endpoint is available at `http://127.0.0.1:3001/health`.
-The local Matrix homeserver is available at `http://127.0.0.1:8008` after the Matrix setup commands complete.
+The local Matrix homeserver is available at `http://127.0.0.1:8008` after the Matrix setup commands complete. The desktop commands require Rust/Cargo and the native Tauri prerequisites described in [the desktop setup guide](docs/development/setup.md).
 
 ## Current boundary
 
-Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. Phase 4 adds the messaging workspace, Phase 5 adds the community-server/channel foundation and Matrix space mapping, Phase 6 adds the LiveKit/Coturn voice boundary, and Phase 7 adds the camera/display capture and diagnostics boundary. Browser login/session wiring, authenticated contact/community/voice-token APIs, live media validation, QR rendering, encrypted media uploads, desktop, mobile, and production deployment remain future work.
+Phase 3 adds a tested friend-code/contact domain foundation: normalized high-entropy codes, keyed-digest storage, revocation/regeneration, invitation URLs, approval-gated contact requests, blocking, and lookup rate limits. Phase 4 adds the messaging workspace, Phase 5 adds the community-server/channel foundation and Matrix space mapping, Phase 6 adds the LiveKit/Coturn voice boundary, Phase 7 adds the camera/display capture and diagnostics boundary, and Phase 8 adds the Tauri desktop shell and secure native capability boundary. Browser login/session wiring, authenticated contact/community/voice-token APIs, live media validation, QR rendering, encrypted media uploads, native desktop validation, mobile, and production deployment remain future work.
 
 ## Important terminology
 

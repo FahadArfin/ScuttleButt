@@ -1,0 +1,11 @@
+[[permission]]
+identifier = "desktopcommands"
+description = "Allow only the narrow Scuttlebutt desktop command surface."
+commands.allow = [
+  "store_session",
+  "load_session",
+  "clear_session",
+  "send_notification",
+  "set_push_to_talk_enabled",
+  "desktop_diagnostics"
+]

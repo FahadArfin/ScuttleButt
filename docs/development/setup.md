@@ -8,6 +8,8 @@ This guide covers the Phase 2 local development environment. It starts the web s
 - pnpm 11.9.0
 - Git
 - Docker Desktop with Linux containers
+- Rust and Cargo for the Tauri desktop app
+- Windows WebView2 and C++ build tools when developing on Windows
 
 The repository records the Node version in `.nvmrc` and the pnpm version in the root `package.json`.
 
@@ -33,6 +35,22 @@ The command builds shared packages once, then starts:
 - Health endpoint: `http://127.0.0.1:3001/health`
 
 The API only exposes a typed health response in Phase 1. It has no authentication, database, business data, or Matrix integration.
+
+## Run the desktop shell
+
+The desktop shell loads the same web frontend and protocol packages inside Tauri. Install the native prerequisites listed in the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/) before running it:
+
+```bash
+pnpm desktop:dev
+```
+
+Build preparation is available with:
+
+```bash
+pnpm desktop:build
+```
+
+The desktop shell stores Matrix sessions through the operating system keychain, not a plaintext file. Native checks are separate from `pnpm check` because Tauri compilation requires Rust and platform SDKs. Do not add an updater until artifact signing, update authorization, rollback, and key rotation are designed.
 
 ## Run the local Matrix environment
 
@@ -75,6 +93,8 @@ pnpm test:e2e
 - `packages/testing`: shared selectors and test constants.
 - `packages/matrix-client`: typed Matrix SDK boundary and local integration test.
 - `packages/livekit-client`: typed LiveKit voice/video boundary with E2EE, capture, fallback, and diagnostics helpers.
+- `apps/desktop`: Tauri shell that reuses the web frontend and owns the narrow native capability surface.
+- `packages/desktop-bridge`: shared web/desktop session, notification, deep-link, push-to-talk, and diagnostics contract.
 - `infrastructure/matrix`: Docker Compose and local Synapse setup instructions.
 - `infrastructure/livekit`: local Redis, LiveKit, and Coturn development stack.
 
@@ -82,6 +102,6 @@ Build output is generated under package `dist/` directories and is ignored by Gi
 
 ## Phase boundary
 
-Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary and Phase 7 adds camera/display capture, fallback, fullscreen, and diagnostics; a local LiveKit/Coturn stack is still required for real media validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.
+Phase 5 community-server/channel foundation work is complete. The default web preview uses deterministic local repositories while browser login/session restoration and authenticated community/contact APIs are wired to the Matrix client. Phase 6 adds the voice boundary, Phase 7 adds camera/display capture, fallback, fullscreen, and diagnostics, and Phase 8 adds the Tauri desktop boundary; a local LiveKit/Coturn stack and Rust/Tauri toolchain are still required for native media and desktop validation. Do not treat attachment staging as an encrypted upload; media transfer belongs to the later media phase.
 
 Start the local voice infrastructure with `pnpm voice:up` and stop it with `pnpm voice:down`. The web voice panel is a preview until a server-issued short-lived LiveKit token, a MatrixRTC membership check, and a dedicated E2EE worker are supplied.

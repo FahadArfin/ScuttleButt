@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Scuttlebutt",
+  "version": "0.1.0",
+  "identifier": "app.scuttlebutt.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @scuttlebutt/web dev --host 127.0.0.1",
+    "beforeBuildCommand": "pnpm --filter @scuttlebutt/web build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../../../apps/web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Scuttlebutt",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:3001 http://127.0.0.1:8008 ws://localhost:7880 https: wss:; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; frame-src 'none';"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["scuttlebutt"]
+      }
+    }
+  }
+}

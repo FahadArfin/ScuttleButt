@@ -9,6 +9,7 @@ import {
 
 import { APP_NAME } from '@scuttlebutt/shared-types';
 import { E2E_SELECTORS } from '@scuttlebutt/testing';
+import { createDesktopBridge, type DesktopDiagnostics } from '@scuttlebutt/desktop-bridge';
 
 import {
   createDemoMessagingRepository,
@@ -38,6 +39,7 @@ const CHANNEL_CONVERSATION_IDS: Record<string, string> = {
   'channel-lounge': 'lounge',
   'channel-welcome': 'welcome',
 };
+const desktopBridge = createDesktopBridge();
 
 function channelIcon(kind: string): string {
   if (kind === 'voice') {
@@ -185,6 +187,7 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
   const [editingMessage, setEditingMessage] = useState<Message>();
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [notice, setNotice] = useState<Notice>();
+  const [desktopDiagnostics, setDesktopDiagnostics] = useState<DesktopDiagnostics>();
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
 
@@ -198,6 +201,21 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
       `${message.senderName} ${message.body}`.toLowerCase().includes(query),
     );
   }, [messages, search]);
+
+  useEffect(() => {
+    let mounted = true;
+    void desktopBridge
+      .getDiagnostics()
+      .then((diagnostics) => {
+        if (mounted) {
+          setDesktopDiagnostics(diagnostics);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -383,7 +401,7 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
         <div className="topbar-actions">
           <span className="connection-pill">
             <span className="connection-dot" aria-hidden="true" />
-            Local workspace
+            {desktopDiagnostics?.runtime === 'desktop' ? 'Desktop workspace' : 'Local workspace'}
           </span>
           <button type="button" className="avatar-button" aria-label="Open your profile">
             FA

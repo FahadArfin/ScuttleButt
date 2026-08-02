@@ -1,5 +1,7 @@
 node_modules/
 .turbo/
+target/
+apps/desktop/src-tauri/gen/
 dist/
 build/
 coverage/

@@ -10,6 +10,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "pnpm build && turbo run dev --parallel",
+    "desktop:build": "pnpm --filter @scuttlebutt/desktop tauri:build",
+    "desktop:dev": "pnpm --filter @scuttlebutt/desktop tauri:dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
