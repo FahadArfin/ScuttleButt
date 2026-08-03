@@ -189,6 +189,15 @@ export class ScuttlebuttDatabase {
       );
       CREATE INDEX IF NOT EXISTS synced_messages_conversation_created_idx
         ON synced_messages(conversation_id, created_at);
+      CREATE TABLE IF NOT EXISTS synced_message_reactions (
+        message_id text NOT NULL REFERENCES synced_messages(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        emoji text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (message_id, user_id, emoji)
+      );
+      CREATE INDEX IF NOT EXISTS synced_message_reactions_message_idx
+        ON synced_message_reactions(message_id, emoji);
     `);
   }
 
@@ -661,14 +670,108 @@ export class ScuttlebuttDatabase {
       await this.pool.query('DELETE FROM synced_messages WHERE id = $1', [messageId]);
       return;
     }
+    if (operation === 'react') {
+      if (!value) throw new Error('Reaction is required.');
+
+      const client = await this.pool.connect();
+      try {
+        await client.query('BEGIN');
+        const lockedResult = await client.query<{
+          message: Record<string, unknown>;
+        }>(
+          `SELECT sm.message FROM synced_messages sm
+           WHERE sm.id = $1 AND sm.conversation_id = $2
+           FOR UPDATE`,
+          [messageId, conversationId],
+        );
+        const lockedRow = lockedResult.rows[0];
+        if (!lockedRow) throw new Error('Message not found.');
+
+        const current = lockedRow.message;
+        const currentReactions = {
+          ...((current.reactions as Record<string, number> | undefined) ?? {}),
+        };
+        const currentReactionUsers = {
+          ...((current.reactionUsers as Record<string, Array<{ id: string; name: string }>> | undefined) ??
+            {}),
+        };
+
+        const existing = await client.query(
+          `SELECT 1 FROM synced_message_reactions
+           WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+          [messageId, userId, value],
+        );
+        if (existing.rowCount > 0) {
+          await client.query(
+            `DELETE FROM synced_message_reactions
+             WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+            [messageId, userId, value],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO synced_message_reactions (message_id, user_id, emoji)
+             VALUES ($1, $2, $3)`,
+            [messageId, userId, value],
+          );
+        }
+
+        const reactionRows = await client.query<{
+          display_name: string;
+          emoji: string;
+          user_id: string;
+        }>(
+          `SELECT r.emoji, r.user_id, u.display_name
+           FROM synced_message_reactions r
+           JOIN users u ON u.id = r.user_id
+           WHERE r.message_id = $1
+           ORDER BY r.created_at, u.display_name`,
+          [messageId],
+        );
+        const nextReactionUsers: Record<string, Array<{ id: string; name: string }>> = {};
+        for (const reaction of reactionRows.rows) {
+          nextReactionUsers[reaction.emoji] ??= [];
+          nextReactionUsers[reaction.emoji].push({
+            id: reaction.user_id,
+            name: reaction.display_name,
+          });
+        }
+
+        const nextReactions = { ...currentReactions };
+        const emojiKeys = new Set([
+          ...Object.keys(currentReactions),
+          ...Object.keys(nextReactionUsers),
+        ]);
+        for (const emoji of emojiKeys) {
+          const knownUsers = currentReactionUsers[emoji]?.length ?? 0;
+          const preservedCount = Math.max(0, (currentReactions[emoji] ?? 0) - knownUsers);
+          const count = preservedCount + (nextReactionUsers[emoji]?.length ?? 0);
+          if (count > 0) nextReactions[emoji] = count;
+          else delete nextReactions[emoji];
+        }
+
+        const next = { ...current, reactions: nextReactions };
+        if (Object.keys(nextReactionUsers).length > 0) {
+          next.reactionUsers = nextReactionUsers;
+        } else {
+          delete next.reactionUsers;
+        }
+        await client.query(
+          'UPDATE synced_messages SET message = $2::jsonb, updated_at = now() WHERE id = $1',
+          [messageId, JSON.stringify(next)],
+        );
+        await client.query('COMMIT');
+        return;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
     const next = { ...row.message };
     if (operation === 'edit') {
       next.body = value ?? '';
       next.edited = true;
-    } else {
-      const reactions = { ...((next.reactions as Record<string, number> | undefined) ?? {}) };
-      if (value) reactions[value] = (reactions[value] ?? 0) + 1;
-      next.reactions = reactions;
     }
     await this.pool.query(
       'UPDATE synced_messages SET message = $2::jsonb, updated_at = now() WHERE id = $1',

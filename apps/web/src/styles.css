@@ -1707,6 +1707,15 @@ img {
   background: #2a3241;
 }
 
+.message-reaction-trigger-wrap {
+  display: inline-flex;
+}
+
+.message-actions .message-reaction-trigger[aria-expanded='true'] {
+  color: var(--accent);
+  background: #2a3241;
+}
+
 .reaction-list {
   display: flex;
   flex-wrap: wrap;
@@ -2179,10 +2188,6 @@ img {
   color: #69758a;
   font-size: 0.58rem;
   text-align: right;
-}
-
-.reaction-add-wrap {
-  position: relative;
 }
 
 .reaction-picker-popover {

@@ -27,6 +27,11 @@ export interface ReplyReference {
   body: string;
 }
 
+export interface ReactionUser {
+  id: string;
+  name: string;
+}
+
 export interface AttachmentDraft {
   id: string;
   alt?: string;
@@ -53,6 +58,7 @@ export interface Message {
   replyTo?: ReplyReference;
   attachments: AttachmentDraft[];
   reactions: Record<string, number>;
+  reactionUsers?: Record<string, ReactionUser[]>;
 }
 
 export interface SendMessageOptions {
@@ -294,6 +300,14 @@ function cloneMessage(message: Message): Message {
     ...message,
     attachments: [...message.attachments],
     reactions: { ...message.reactions },
+    reactionUsers: message.reactionUsers
+      ? Object.fromEntries(
+          Object.entries(message.reactionUsers).map(([emoji, users]) => [
+            emoji,
+            users.map((user) => ({ ...user })),
+          ]),
+        )
+      : undefined,
     replyTo: message.replyTo ? { ...message.replyTo } : undefined,
   };
 }
@@ -378,7 +392,30 @@ export function createDemoMessagingRepository(user?: {
       if (!message) {
         throw new Error('Message not found.');
       }
-      message.reactions[emoji] = (message.reactions[emoji] ?? 0) + 1;
+      const reactionUsers = message.reactionUsers ?? {};
+      const users = [...(reactionUsers[emoji] ?? [])];
+      const legacyCount = Math.max(0, (message.reactions[emoji] ?? 0) - users.length);
+      const currentUserIndex = users.findIndex(({ id }) => id === currentUser.id);
+
+      if (currentUserIndex >= 0) {
+        users.splice(currentUserIndex, 1);
+      } else {
+        users.push({ id: currentUser.id, name: currentUser.name });
+      }
+
+      if (users.length > 0) {
+        reactionUsers[emoji] = users;
+      } else {
+        delete reactionUsers[emoji];
+      }
+      message.reactionUsers = Object.keys(reactionUsers).length > 0 ? reactionUsers : undefined;
+
+      const nextCount = legacyCount + users.length;
+      if (nextCount > 0) {
+        message.reactions[emoji] = nextCount;
+      } else {
+        delete message.reactions[emoji];
+      }
     },
 
     async markRead(conversationId) {

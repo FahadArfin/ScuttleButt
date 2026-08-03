@@ -359,6 +359,7 @@ export function MessageRow({
             type="button"
             onClick={() => onReply(message)}
             aria-label={`Reply to ${message.senderName}`}
+            title={`Reply to ${message.senderName}`}
           >
             <ChatCenteredDots size={15} />
             Reply
@@ -386,12 +387,34 @@ export function MessageRow({
               <img src={emote.dataUrl} alt="" />
             </button>
           ))}
+          <div className="message-reaction-trigger-wrap" ref={reactionAnchorRef}>
+            <button
+              type="button"
+              className="message-reaction-trigger"
+              aria-label="Add reaction"
+              aria-expanded={reactionPickerOpen}
+              title="Add reaction"
+              onClick={toggleReactionPicker}
+            >
+              <Smiley size={15} />
+            </button>
+          </div>
           {message.own ? (
             <>
-              <button type="button" onClick={() => onEdit(message)} aria-label="Edit message">
+              <button
+                type="button"
+                onClick={() => onEdit(message)}
+                aria-label="Edit message"
+                title="Edit message"
+              >
                 <PencilSimple size={15} />
               </button>
-              <button type="button" onClick={() => onDelete(message)} aria-label="Delete message">
+              <button
+                type="button"
+                onClick={() => onDelete(message)}
+                aria-label="Delete message"
+                title="Delete message"
+              >
                 <Trash size={15} />
               </button>
             </>
@@ -399,40 +422,40 @@ export function MessageRow({
         </div>
         <div className="reaction-list" aria-label="Message reactions">
           {Object.entries(message.reactions).map(([emoji, count]) => (
-            <button
-              type="button"
-              className="reaction-pill"
-              key={emoji}
-              onClick={() => onReact(message, emoji)}
-            >
-              {(() => {
-                const mediaReaction = parseMediaReaction(emoji);
-                const emote = emotes.find(({ name }) => `:${name}:` === emoji);
-                if (mediaReaction) {
-                  return (
-                    <img
-                      className="reaction-media-image"
-                      src={mediaReaction.previewUrl}
-                      alt={`Shared ${mediaReaction.kind}`}
-                    />
-                  );
-                }
-                return emote ? <img src={emote.dataUrl} alt={emoji} /> : emoji;
-              })()}{' '}
-              <span>{count}</span>
-            </button>
+            (() => {
+              const reactors = message.reactionUsers?.[emoji] ?? [];
+              const reactorNames = reactors.map(({ name }) => name).filter(Boolean);
+              const reactionTitle = reactorNames.length
+                ? `${reactorNames.join(', ')} reacted with ${emoji}`
+                : `${count} reaction${count === 1 ? '' : 's'}`;
+              return (
+                <button
+                  type="button"
+                  className="reaction-pill"
+                  key={emoji}
+                  onClick={() => onReact(message, emoji)}
+                  aria-label={reactionTitle}
+                  title={reactionTitle}
+                >
+                  {(() => {
+                    const mediaReaction = parseMediaReaction(emoji);
+                    const emote = emotes.find(({ name }) => `:${name}:` === emoji);
+                    if (mediaReaction) {
+                      return (
+                        <img
+                          className="reaction-media-image"
+                          src={mediaReaction.previewUrl}
+                          alt={`Shared ${mediaReaction.kind}`}
+                        />
+                      );
+                    }
+                    return emote ? <img src={emote.dataUrl} alt={emoji} /> : emoji;
+                  })()}{' '}
+                  <span>{count}</span>
+                </button>
+              );
+            })()
           ))}
-          <div className="reaction-add-wrap" ref={reactionAnchorRef}>
-            <button
-              type="button"
-              className="reaction-add"
-              aria-label="Add reaction"
-              aria-expanded={reactionPickerOpen}
-              onClick={toggleReactionPicker}
-            >
-              <Smiley size={14} />
-            </button>
-          </div>
         </div>
         {message.status === 'failed' ? (
           <div className="message-failure" role="alert">
