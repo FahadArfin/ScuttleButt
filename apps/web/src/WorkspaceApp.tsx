@@ -2227,6 +2227,8 @@ function GroupNavigation({
               <button
                 type="button"
                 aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${category.name}`}
+                aria-expanded={!collapsed}
+                aria-controls={`category-channels-${category.id}`}
                 onClick={() =>
                   setCollapsedCategories((current) => ({
                     ...current,
@@ -2245,7 +2247,13 @@ function GroupNavigation({
                 <Plus size={15} />
               </button>
             </div>
-            {!collapsed ? renderChannelSections(categoryChannels, false) : null}
+            <div
+              id={`category-channels-${category.id}`}
+              className="category-channel-list"
+              hidden={collapsed}
+            >
+              {renderChannelSections(categoryChannels, false)}
+            </div>
           </section>
         );
       })}
@@ -2337,7 +2345,9 @@ function ChannelSection({
           </button>
         </div>
       ) : null}
-      {channels.length === 0 ? <p className="channel-empty">No channels yet</p> : null}
+      {channels.length === 0 && type !== 'voice' ? (
+        <p className="channel-empty">No channels yet</p>
+      ) : null}
       {channels.map((channel) => {
         const active = selectedConversationId === channel.conversationId;
         if (type === 'text' || type === 'forum') {
