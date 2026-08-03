@@ -137,7 +137,7 @@ const FRIEND_CODE_STORAGE_KEY = 'scuttlebutt:friend-code';
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PROFILE_STORAGE_KEY = 'scuttlebutt:profile:v2';
 const HIDDEN_MUTED_GROUPS_STORAGE_KEY = 'scuttlebutt:hidden-muted-groups:v1';
-const SHOW_SERVER_PROFILE_BANNER = false;
+const SHOW_SERVER_PROFILE_BANNER = true;
 const SHOW_GROUP_WORKSPACE_HEADER = false;
 
 interface UserProfile {
@@ -1188,10 +1188,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     activeSurface === 'groups' && Boolean(activeGroup) && !SHOW_GROUP_WORKSPACE_HEADER;
   const groupSidebarLayoutClass =
     activeSurface === 'groups' && activeGroup
-      ? hideGroupWorkspaceHeader
-        ? 'workspace-sidebar-group-compact'
-        : SHOW_SERVER_PROFILE_BANNER
-          ? 'workspace-sidebar-group'
+      ? SHOW_SERVER_PROFILE_BANNER
+        ? 'workspace-sidebar-group-banner'
+        : hideGroupWorkspaceHeader
+          ? 'workspace-sidebar-group-compact'
           : 'workspace-sidebar-group-header'
       : '';
 
@@ -1221,7 +1221,12 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
           {activeSurface === 'groups' && activeGroup && SHOW_SERVER_PROFILE_BANNER ? (
             <div
               className="group-server-banner group-server-banner-top"
-              style={{ backgroundColor: serverSettingsFor(activeGroup).bannerColor }}
+              style={{
+                backgroundColor: serverSettingsFor(activeGroup).bannerColor,
+                backgroundImage: serverSettingsFor(activeGroup).bannerUrl
+                  ? `linear-gradient(90deg, rgb(0 0 0 / 68%), rgb(0 0 0 / 12%)), url(${serverSettingsFor(activeGroup).bannerUrl})`
+                  : undefined,
+              }}
             >
               <ServerProfileIcon className="group-server-banner-icon" group={activeGroup} />
               <div>
@@ -2113,6 +2118,7 @@ function GroupNavigation({
     y: number;
   }>();
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const visibleChannels = group.channels.filter(
     (channel) =>
       canViewWorkspaceChannel(group, channel, currentUserId) &&
@@ -2159,56 +2165,57 @@ function GroupNavigation({
     onJoinVoice(conversationId);
   };
 
-  const renderChannelSections = (channels: WorkspaceChannel[], showHeadings = true) => {
+  const renderChannelSections = (
+    channels: WorkspaceChannel[],
+    showHeadings = true,
+    sectionPrefix = 'root',
+  ) => {
     const textChannels = channels.filter(({ kind }) => kind === 'text');
     const forumChannels = channels.filter(({ kind }) => kind === 'forum');
     const voiceChannels = channels.filter(({ kind }) => kind === 'voice');
+    const renderSection = (
+      sectionChannels: WorkspaceChannel[],
+      type: 'text' | 'voice' | 'forum',
+      title: string,
+      onCreate: () => void,
+    ) => {
+      const sectionKey = `${sectionPrefix}-${type}`;
+      const collapsed = showHeadings ? (collapsedSections[sectionKey] ?? false) : false;
+      return (
+        <ChannelSection
+          channels={sectionChannels}
+          selectedConversationId={selectedConversationId}
+          onCreate={onCreate}
+          onSelect={type === 'voice' ? joinVoice : selectChannel}
+          onToggleMute={onToggleMute}
+          showHeading={showHeadings}
+          title={title}
+          type={type}
+          collapsed={collapsed}
+          collapseId={showHeadings ? `channel-section-${sectionKey}` : undefined}
+          onToggleCollapse={
+            showHeadings
+              ? () =>
+                  setCollapsedSections((current) => ({
+                    ...current,
+                    [sectionKey]: !collapsed,
+                  }))
+              : undefined
+          }
+          localAvatar={localAvatar}
+          localSpeaking={localSpeaking}
+          currentUserId={currentUserId}
+          members={members}
+        />
+      );
+    };
     return (
       <>
-        <ChannelSection
-          channels={textChannels}
-          selectedConversationId={selectedConversationId}
-          onCreate={onCreateText}
-          onSelect={selectChannel}
-          onToggleMute={onToggleMute}
-          showHeading={showHeadings}
-          title="Text channels"
-          type="text"
-          localAvatar={localAvatar}
-          localSpeaking={localSpeaking}
-          currentUserId={currentUserId}
-          members={members}
-        />
-        {forumChannels.length || !showHeadings ? (
-          <ChannelSection
-            channels={forumChannels}
-            selectedConversationId={selectedConversationId}
-            onCreate={onCreateForum}
-            onSelect={selectChannel}
-            onToggleMute={onToggleMute}
-            showHeading={showHeadings}
-            title="Forum channels"
-            type="forum"
-            localAvatar={localAvatar}
-            localSpeaking={localSpeaking}
-            currentUserId={currentUserId}
-            members={members}
-          />
-        ) : null}
-        <ChannelSection
-          channels={voiceChannels}
-          selectedConversationId={selectedConversationId}
-          onCreate={onCreateVoice}
-          onSelect={joinVoice}
-          onToggleMute={onToggleMute}
-          showHeading={showHeadings}
-          title="Voice channels"
-          type="voice"
-          localAvatar={localAvatar}
-          localSpeaking={localSpeaking}
-          currentUserId={currentUserId}
-          members={members}
-        />
+        {renderSection(textChannels, 'text', 'Text channels', onCreateText)}
+        {forumChannels.length || !showHeadings
+          ? renderSection(forumChannels, 'forum', 'Forum channels', onCreateForum)
+          : null}
+        {renderSection(voiceChannels, 'voice', 'Voice channels', onCreateVoice)}
       </>
     );
   };
@@ -2271,7 +2278,7 @@ function GroupNavigation({
               className="category-channel-list"
               hidden={collapsed}
             >
-              {renderChannelSections(categoryChannels, false)}
+              {renderChannelSections(categoryChannels, false, `category-${category.id}`)}
             </div>
           </section>
         );
@@ -2327,12 +2334,15 @@ function GroupNavigation({
 
 function ChannelSection({
   channels,
+  collapsed = false,
+  collapseId,
   currentUserId,
   localAvatar,
   localSpeaking,
   members,
   onCreate,
   onSelect,
+  onToggleCollapse,
   onToggleMute,
   selectedConversationId,
   showHeading = true,
@@ -2340,124 +2350,142 @@ function ChannelSection({
   type,
 }: {
   channels: WorkspaceChannel[];
+  collapsed?: boolean;
+  collapseId?: string;
   currentUserId: string;
   localAvatar: string;
   localSpeaking: boolean;
   members: WorkspaceMember[];
   onCreate: () => void;
   onSelect: (conversationId: string) => void;
+  onToggleCollapse?: () => void;
   onToggleMute: (channelId: string) => void;
   selectedConversationId: string;
   showHeading?: boolean;
   title?: string;
   type: 'text' | 'voice' | 'forum';
 }) {
+  const sectionTitle = title ?? (type === 'voice' ? 'Voice channels' : 'Text channels');
   return (
     <div
       className={`nav-section channel-section ${type === 'voice' ? 'voice-section' : ''} ${showHeading ? '' : 'channel-section-compact'}`}
     >
       {showHeading ? (
         <div className="nav-section-heading">
-          <span>{title ?? (type === 'voice' ? 'Voice channels' : 'Text channels')}</span>
+          <button
+            type="button"
+            className="nav-section-heading-toggle"
+            aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${sectionTitle}`}
+            aria-expanded={!collapsed}
+            aria-controls={collapseId}
+            onClick={onToggleCollapse}
+          >
+            {collapsed ? <CaretRight size={13} /> : <CaretDown size={13} />}
+            <span>{sectionTitle}</span>
+          </button>
           <button type="button" aria-label={`Add a ${type} channel`} onClick={onCreate}>
             <Plus size={16} />
           </button>
         </div>
       ) : null}
-      {channels.length === 0 && type !== 'voice' ? (
-        <p className="channel-empty">No channels yet</p>
-      ) : null}
-      {channels.map((channel) => {
-        const active = selectedConversationId === channel.conversationId;
-        if (type === 'text' || type === 'forum') {
+      <div id={collapseId} className="channel-section-content" hidden={collapsed}>
+        {channels.length === 0 && type !== 'voice' ? (
+          <p className="channel-empty">No channels yet</p>
+        ) : null}
+        {channels.map((channel) => {
+          const active = selectedConversationId === channel.conversationId;
+          if (type === 'text' || type === 'forum') {
+            return (
+              <div className="channel-button-row" data-channel-id={channel.id} key={channel.id}>
+                <button
+                  type="button"
+                  className={`channel-button ${active ? 'channel-button-active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => onSelect(channel.conversationId)}
+                >
+                  {type === 'forum' ? (
+                    <ChatCircleText size={18} weight={active ? 'bold' : 'regular'} />
+                  ) : (
+                    <Hash size={18} weight={active ? 'bold' : 'regular'} />
+                  )}
+                  <span>{channel.name}</span>
+                  {channel.isPrivate ? <LockSimple size={14} /> : null}
+                  {channel.muted ? <BellSlash size={14} /> : null}
+                </button>
+                <button
+                  type="button"
+                  className="channel-mute-button"
+                  aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
+                  aria-pressed={channel.muted}
+                  onClick={() => onToggleMute(channel.id)}
+                >
+                  {channel.muted ? <BellSlash size={14} /> : <Bell size={14} />}
+                </button>
+              </div>
+            );
+          }
+          const participants = channel.participantIds
+            .map((id) => members.find((member) => member.id === id))
+            .filter((member): member is WorkspaceMember => Boolean(member));
           return (
-            <div className="channel-button-row" data-channel-id={channel.id} key={channel.id}>
+            <div
+              className={`voice-channel-card ${active ? 'voice-channel-card-active' : ''}`}
+              data-channel-id={channel.id}
+              key={channel.id}
+            >
               <button
                 type="button"
-                className={`channel-button ${active ? 'channel-button-active' : ''}`}
-                aria-current={active ? 'page' : undefined}
+                className="voice-channel-name"
                 onClick={() => onSelect(channel.conversationId)}
               >
-                {type === 'forum' ? (
-                  <ChatCircleText size={18} weight={active ? 'bold' : 'regular'} />
-                ) : (
-                  <Hash size={18} weight={active ? 'bold' : 'regular'} />
-                )}
-                <span>{channel.name}</span>
-                {channel.isPrivate ? <LockSimple size={14} /> : null}
-                {channel.muted ? <BellSlash size={14} /> : null}
+                <SpeakerHigh size={18} weight="fill" />
+                <span>
+                  <strong>{channel.name}</strong>
+                  <small>
+                    {participants.length ? `${participants.length} connected` : 'Empty room'}
+                  </small>
+                </span>
+                <Users size={15} />
+                <b>{participants.length}</b>
               </button>
               <button
                 type="button"
-                className="channel-mute-button"
+                className="voice-channel-mute-button"
                 aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
                 aria-pressed={channel.muted}
                 onClick={() => onToggleMute(channel.id)}
               >
                 {channel.muted ? <BellSlash size={14} /> : <Bell size={14} />}
               </button>
+              {participants.length > 0 ? (
+                <div className="voice-connected-list" aria-label={`${channel.name} participants`}>
+                  {participants.map((participant) => (
+                    <button
+                      type="button"
+                      key={participant.id}
+                      className={
+                        participant.id === currentUserId && localSpeaking
+                          ? 'voice-user-speaking'
+                          : ''
+                      }
+                      onClick={() => onSelect(channel.conversationId)}
+                    >
+                      <PersonAvatar
+                        image={participant.id === currentUserId ? localAvatar : participant.avatar}
+                        name={participant.name}
+                        status={participant.status}
+                        size="small"
+                      />
+                      <span>{participant.name}</span>
+                      <Microphone size={13} />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           );
-        }
-        const participants = channel.participantIds
-          .map((id) => members.find((member) => member.id === id))
-          .filter((member): member is WorkspaceMember => Boolean(member));
-        return (
-          <div
-            className={`voice-channel-card ${active ? 'voice-channel-card-active' : ''}`}
-            data-channel-id={channel.id}
-            key={channel.id}
-          >
-            <button
-              type="button"
-              className="voice-channel-name"
-              onClick={() => onSelect(channel.conversationId)}
-            >
-              <SpeakerHigh size={18} weight="fill" />
-              <span>
-                <strong>{channel.name}</strong>
-                <small>
-                  {participants.length ? `${participants.length} connected` : 'Empty room'}
-                </small>
-              </span>
-              <Users size={15} />
-              <b>{participants.length}</b>
-            </button>
-            <button
-              type="button"
-              className="voice-channel-mute-button"
-              aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
-              aria-pressed={channel.muted}
-              onClick={() => onToggleMute(channel.id)}
-            >
-              {channel.muted ? <BellSlash size={14} /> : <Bell size={14} />}
-            </button>
-            {participants.length > 0 ? (
-              <div className="voice-connected-list" aria-label={`${channel.name} participants`}>
-                {participants.map((participant) => (
-                  <button
-                    type="button"
-                    key={participant.id}
-                    className={
-                      participant.id === currentUserId && localSpeaking ? 'voice-user-speaking' : ''
-                    }
-                    onClick={() => onSelect(channel.conversationId)}
-                  >
-                    <PersonAvatar
-                      image={participant.id === currentUserId ? localAvatar : participant.avatar}
-                      name={participant.name}
-                      status={participant.status}
-                      size="small"
-                    />
-                    <span>{participant.name}</span>
-                    <Microphone size={13} />
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+        })}
+      </div>
     </div>
   );
 }

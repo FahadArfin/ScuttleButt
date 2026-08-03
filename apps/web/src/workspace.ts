@@ -112,6 +112,7 @@ export interface ServerSettings {
     rules: string[];
     rulesEnabled: boolean;
   };
+  bannerUrl: string;
   bannerColor: string;
   communityEnabled: boolean;
   engagement: {
@@ -185,6 +186,7 @@ export function createDefaultServerSettings(): ServerSettings {
       rules: [],
       rulesEnabled: false,
     },
+    bannerUrl: '',
     bannerColor: '#283457',
     communityEnabled: false,
     engagement: {

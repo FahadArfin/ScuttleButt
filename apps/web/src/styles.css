@@ -234,12 +234,12 @@ img {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 }
 
-.workspace-sidebar-group-compact {
-  grid-template-rows: minmax(0, 1fr) auto auto;
+.workspace-sidebar-group-banner {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
 }
 
-.workspace-sidebar-group-compact .community-heading {
-  display: none;
+.workspace-sidebar-group-compact {
+  grid-template-rows: minmax(0, 1fr) auto auto;
 }
 
 .workspace-titlebar {
@@ -445,6 +445,25 @@ img {
   background: var(--surface-raised);
 }
 
+.nav-section-heading .nav-section-heading-toggle {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.nav-section-heading .nav-section-heading-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .community-heading {
   position: relative;
   min-height: 40px;
@@ -468,12 +487,20 @@ img {
 }
 
 .group-server-banner-top {
-  min-height: 128px;
+  position: relative;
+  min-height: 164px;
   align-items: flex-end;
   gap: 12px;
   margin: 0;
   padding: 18px 18px 15px;
+  background-position: center;
+  background-size: cover;
   border-bottom-color: color-mix(in srgb, var(--server-banner-color) 52%, var(--line));
+}
+
+.group-server-banner-top > * {
+  position: relative;
+  z-index: 1;
 }
 
 .group-server-banner-top .group-server-banner-icon {
@@ -3819,7 +3846,7 @@ img {
   }
 
   .group-server-banner-top {
-    min-height: 112px;
+    min-height: 132px;
     padding: 14px 14px 12px;
   }
 
@@ -5541,7 +5568,9 @@ img {
 }
 
 .server-profile-banner {
-  height: 110px;
+  height: 156px;
+  background-position: center;
+  background-size: cover;
 }
 
 .server-profile-card-body {
@@ -5591,6 +5620,28 @@ img {
 .server-banner-options button.selected {
   border-color: #9caaff;
   box-shadow: 0 0 0 2px rgb(88 101 242 / 25%);
+}
+
+.server-banner-upload-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.server-banner-upload-row small {
+  color: #8d96aa;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.server-banner-upload-row input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
 }
 
 .server-traits-grid {

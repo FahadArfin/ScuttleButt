@@ -12,7 +12,7 @@ import {
 } from '@phosphor-icons/react';
 
 import { PersonAvatar } from './App.js';
-import { optimizeAvatar } from './image-utils.js';
+import { optimizeAvatar, optimizeBanner } from './image-utils.js';
 import {
   serverSettingsFor,
   type CustomEmote,
@@ -312,6 +312,25 @@ export function ServerSettingsDialog({
     }
   };
 
+  const handleBannerUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Banner files must be an image.');
+      return;
+    }
+    setUploadError('');
+    try {
+      const bannerUrl = await optimizeBanner(file);
+      updateSettings({ bannerUrl });
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : 'The server banner could not be processed.',
+      );
+    }
+  };
+
   const handleEmojiUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
@@ -430,7 +449,15 @@ export function ServerSettingsDialog({
         description="Make your server recognizable in invites, member lists, and discovery."
       />
       <SettingsCard className="server-profile-card">
-        <div className="server-profile-banner" style={{ backgroundColor: settings.bannerColor }} />
+        <div
+          className="server-profile-banner"
+          style={{
+            backgroundColor: settings.bannerColor,
+            backgroundImage: settings.bannerUrl
+              ? `linear-gradient(90deg, rgb(0 0 0 / 62%), rgb(0 0 0 / 10%)), url(${settings.bannerUrl})`
+              : undefined,
+          }}
+        />
         <div className="server-profile-card-body">
           <PersonAvatar image={settings.iconUrl || undefined} name={draft.name} size="large" />
           <div>
@@ -469,7 +496,7 @@ export function ServerSettingsDialog({
       <SettingsCard>
         <h2>Banner</h2>
         <p className="server-settings-muted">
-          Choose a color that appears behind your server icon.
+          Choose a color or upload a wide image for the banner behind your server profile.
         </p>
         <div className="server-banner-options">
           {BANNER_COLORS.map((color) => (
@@ -483,6 +510,26 @@ export function ServerSettingsDialog({
               onClick={() => updateSettings({ bannerColor: color })}
             />
           ))}
+        </div>
+        <div className="server-banner-upload-row">
+          <label className="server-settings-button server-settings-button-primary">
+            <UploadSimple size={16} /> Upload banner image
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => void handleBannerUpload(event)}
+            />
+          </label>
+          <small>Wide images are resized automatically. Recommended: 3:1, up to 2 MB.</small>
+          {settings.bannerUrl ? (
+            <button
+              type="button"
+              className="server-settings-button"
+              onClick={() => updateSettings({ bannerUrl: '' })}
+            >
+              Remove image
+            </button>
+          ) : null}
         </div>
       </SettingsCard>
       <div className="server-settings-form-grid">
