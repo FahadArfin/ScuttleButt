@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'rea
 
 import { Camera, Check, ChatCenteredDots, UploadSimple } from '@phosphor-icons/react';
 
-import type { SignedInUser } from './auth.js';
+import { getStoredGoogleCredential, updateStoredAuthUser, type SignedInUser } from './auth.js';
 import { optimizeAvatar } from './image-utils.js';
 import { INTERESTS, RECOMMENDED_SERVERS } from './onboarding-data.js';
 import { GROUP_STORAGE_KEY } from './workspace.js';
@@ -91,7 +91,7 @@ export function OnboardingPage({
       tags,
     };
     try {
-      const credential = sessionStorage.getItem('scuttlebutt:google-credential');
+      const credential = getStoredGoogleCredential();
       let nextUser: SignedInUser = { ...user, ...profile, onboardingCompleted: true };
       if (credential) {
         const response = await fetch('/api/profile', {
@@ -126,7 +126,7 @@ export function OnboardingPage({
           status: 'Online',
         }),
       );
-      sessionStorage.setItem('scuttlebutt:user', JSON.stringify(nextUser));
+      updateStoredAuthUser(nextUser);
       onComplete(nextUser);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Your profile could not be saved.');

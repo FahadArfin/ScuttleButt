@@ -23,6 +23,19 @@ interface GoogleCredentialResponse {
   credential: string;
 }
 
+const AUTH_SESSION_STORAGE_KEY = 'scuttlebutt:auth-session';
+const LEGACY_USER_STORAGE_KEY = 'scuttlebutt:user';
+const LEGACY_CREDENTIAL_STORAGE_KEY = 'scuttlebutt:google-credential';
+const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const GOOGLE_CREDENTIAL_REFRESH_INTERVAL_MS = 45 * 60 * 1000;
+
+export interface AuthSession {
+  credential: string | null;
+  credentialRefreshedAt: number;
+  expiresAt: number;
+  user: SignedInUser;
+}
+
 function normalizeUser(
   user: Partial<SignedInUser> & Pick<SignedInUser, 'email' | 'id' | 'name'>,
 ): SignedInUser {
@@ -42,15 +55,113 @@ function normalizeUser(
   };
 }
 
+function parseStoredUser(value: unknown): SignedInUser | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<SignedInUser>;
+  if (
+    typeof candidate.email !== 'string' ||
+    typeof candidate.id !== 'string' ||
+    typeof candidate.name !== 'string'
+  ) {
+    return null;
+  }
+  return normalizeUser(
+    candidate as Partial<SignedInUser> & Pick<SignedInUser, 'email' | 'id' | 'name'>,
+  );
+}
+
+function readAuthSession(): AuthSession | null {
+  try {
+    const raw = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as Partial<StoredAuthSession>;
+    const user = parseStoredUser(stored.user);
+    if (!user || typeof stored.expiresAt !== 'number' || stored.expiresAt <= Date.now()) {
+      window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+      return null;
+    }
+    return {
+      credential: typeof stored.credential === 'string' ? stored.credential : null,
+      credentialRefreshedAt:
+        typeof stored.credentialRefreshedAt === 'number'
+          ? stored.credentialRefreshedAt
+          : Date.now(),
+      expiresAt: stored.expiresAt,
+      user,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function persistAuthSession(user: SignedInUser, credential: string | null): void {
+  const session: AuthSession = {
+    credential,
+    credentialRefreshedAt: Date.now(),
+    expiresAt: Date.now() + AUTH_SESSION_TTL_MS,
+    user,
+  };
+  window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+export function loadAuthSession(): AuthSession | null {
+  const stored = readAuthSession();
+  if (stored) return stored;
+
+  try {
+    const legacyUser = window.sessionStorage.getItem(LEGACY_USER_STORAGE_KEY);
+    if (!legacyUser) return null;
+    const user = parseStoredUser(JSON.parse(legacyUser));
+    if (!user) return null;
+    const credential = window.sessionStorage.getItem(LEGACY_CREDENTIAL_STORAGE_KEY);
+    persistAuthSession(user, credential);
+    window.sessionStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_CREDENTIAL_STORAGE_KEY);
+    return readAuthSession();
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredGoogleCredential(): string | null {
+  const session = loadAuthSession();
+  return session?.credential || null;
+}
+
+export function updateStoredAuthUser(user: SignedInUser): void {
+  const session = loadAuthSession();
+  if (!session) return;
+  window.localStorage.setItem(
+    AUTH_SESSION_STORAGE_KEY,
+    JSON.stringify({ ...session, user }),
+  );
+}
+
+export function clearAuthSession(): void {
+  window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  window.sessionStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+  window.sessionStorage.removeItem(LEGACY_CREDENTIAL_STORAGE_KEY);
+}
+
+function shouldRefreshGoogleCredential(): boolean {
+  const session = loadAuthSession();
+  return Boolean(
+    session?.credential &&
+      Date.now() - session.credentialRefreshedAt >= GOOGLE_CREDENTIAL_REFRESH_INTERVAL_MS,
+  );
+}
+
 declare global {
   interface Window {
     google?: {
       accounts: {
         id: {
           initialize: (options: {
+            auto_select?: boolean;
             callback: (response: GoogleCredentialResponse) => void;
             client_id: string;
           }) => void;
+          prompt: () => void;
           renderButton: (element: HTMLElement, options: Record<string, string>) => void;
         };
       };
@@ -60,12 +171,13 @@ declare global {
 
 export function AuthGate({ children }: { children: (user: SignedInUser) => ReactNode }) {
   const [clientId, setClientId] = useState<string | null | undefined>(undefined);
-  const [user, setUser] = useState<SignedInUser | null>(() => {
-    const stored = sessionStorage.getItem('scuttlebutt:user');
-    return stored ? normalizeUser(JSON.parse(stored) as SignedInUser) : null;
-  });
+  const [user, setUser] = useState<SignedInUser | null>(() => loadAuthSession()?.user ?? null);
   const [error, setError] = useState('');
   const buttonRef = useRef<HTMLDivElement>(null);
+  const currentUserRef = useRef(user);
+  const googleMountedRef = useRef<string | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
+  currentUserRef.current = user;
 
   useEffect(() => {
     void fetch('/api/config')
@@ -79,10 +191,12 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
   }, []);
 
   useEffect(() => {
-    if (!clientId || user) return;
+    if (!clientId || googleMountedRef.current === clientId) return;
     const mountGoogle = () => {
-      if (!window.google || !buttonRef.current) return;
+      if (!window.google || googleMountedRef.current === clientId) return;
+      googleMountedRef.current = clientId;
       window.google.accounts.id.initialize({
+        auto_select: Boolean(currentUserRef.current && shouldRefreshGoogleCredential()),
         client_id: clientId,
         callback: (response) => {
           setError('');
@@ -95,22 +209,30 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
               if (!result.ok) throw new Error('Google sign-in could not be completed.');
               const payload = (await result.json()) as { user: SignedInUser };
               const nextUser = normalizeUser(payload.user);
-              sessionStorage.setItem('scuttlebutt:user', JSON.stringify(nextUser));
-              sessionStorage.setItem('scuttlebutt:google-credential', response.credential);
+              persistAuthSession(nextUser, response.credential);
               setUser(nextUser);
             })
             .catch((reason: unknown) =>
               setError(reason instanceof Error ? reason.message : 'Sign-in failed.'),
-            );
+          );
         },
       });
-      buttonRef.current.replaceChildren();
-      window.google.accounts.id.renderButton(buttonRef.current, {
-        shape: 'pill',
-        size: 'large',
-        text: 'continue_with',
-        theme: 'filled_black',
-      });
+      if (currentUserRef.current) {
+        if (shouldRefreshGoogleCredential()) window.google.accounts.id.prompt();
+        refreshTimerRef.current = window.setInterval(() => {
+          if (currentUserRef.current && shouldRefreshGoogleCredential()) {
+            window.google?.accounts.id.prompt();
+          }
+        }, GOOGLE_CREDENTIAL_REFRESH_INTERVAL_MS);
+      } else if (buttonRef.current) {
+        buttonRef.current.replaceChildren();
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          shape: 'pill',
+          size: 'large',
+          text: 'continue_with',
+          theme: 'filled_black',
+        });
+      }
     };
     const existing = document.querySelector<HTMLScriptElement>('script[data-scuttlebutt-google]');
     if (existing) {
@@ -124,7 +246,13 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
     script.dataset.scuttlebuttGoogle = 'true';
     script.addEventListener('load', mountGoogle, { once: true });
     document.head.append(script);
-  }, [clientId, user]);
+    return () => {
+      if (refreshTimerRef.current !== null) {
+        window.clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [clientId]);
 
   if (user) {
     return user.onboardingCompleted ? (

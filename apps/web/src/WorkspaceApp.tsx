@@ -68,7 +68,12 @@ import { APP_NAME } from '@scuttlebutt/shared-types';
 import { E2E_SELECTORS } from '@scuttlebutt/testing';
 
 import { MessageRow, PersonAvatar } from './App.js';
-import type { SignedInUser } from './auth.js';
+import {
+  clearAuthSession,
+  getStoredGoogleCredential,
+  updateStoredAuthUser,
+  type SignedInUser,
+} from './auth.js';
 import { optimizeAvatar } from './image-utils.js';
 import { MediaPicker, type MediaAsset } from './media-picker.js';
 import {
@@ -497,7 +502,7 @@ function formatEventLocation(event: ServerEvent): string {
 }
 
 export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
-  const googleCredential = sessionStorage.getItem('scuttlebutt:google-credential');
+  const googleCredential = user.id === 'local-user' ? null : getStoredGoogleCredential();
   const [repository] = useState<MessagingRepository>(
     () =>
       repositoryProp ??
@@ -1357,8 +1362,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   };
 
   const logOut = () => {
-    sessionStorage.removeItem('scuttlebutt:user');
-    sessionStorage.removeItem('scuttlebutt:google-credential');
+    clearAuthSession();
     window.location.reload();
   };
 
@@ -1373,13 +1377,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     }
     try {
       await updatePresence(googleCredential, next);
-      const storedUser = sessionStorage.getItem('scuttlebutt:user');
-      if (storedUser) {
-        sessionStorage.setItem(
-          'scuttlebutt:user',
-          JSON.stringify({ ...(JSON.parse(storedUser) as SignedInUser), presence: next }),
-        );
-      }
+      updateStoredAuthUser({ ...user, presence: next });
       setNotice({ tone: 'info', text: `Your status is now ${PRESENCE_LABELS[next]}.` });
     } catch (reason) {
       setProfile((current) => ({ ...current, presence: previous }));
