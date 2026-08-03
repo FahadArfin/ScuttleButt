@@ -81,6 +81,7 @@ import {
   loadStoredDms,
   loadStoredGroups,
   slugify,
+  createDefaultServerSettings,
   type AppSurface,
   type CustomEmote,
   type CustomSound,
@@ -89,6 +90,7 @@ import {
   type WorkspaceGroup,
   type WorkspaceMember,
 } from './workspace.js';
+import { ServerSettingsDialog, type ServerSettingsSection } from './server-settings.js';
 
 interface WorkspaceAppProps {
   repository?: MessagingRepository;
@@ -212,6 +214,9 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [friendDialogOpen, setFriendDialogOpen] = useState(false);
   const [groupInviteOpen, setGroupInviteOpen] = useState(false);
   const [assetDialog, setAssetDialog] = useState<'emote' | 'sound'>();
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const [serverSettingsSection, setServerSettingsSection] =
+    useState<ServerSettingsSection>('profile');
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [friendState, setFriendState] = useState<FriendState>({
     friendCode: user.friendCode ?? loadFriendCode(),
@@ -230,29 +235,23 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   );
   const friendCode = friendState.friendCode;
   const activeGroup = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
-  const members = useMemo<WorkspaceMember[]>(
-    () => {
-      const localMember: WorkspaceMember =
-      {
-        id: user.id,
-        avatar: profile.avatar,
-        name: profile.displayName,
-        note: 'You',
-        status: 'online',
-      };
-      return [
-        localMember,
-        ...(activeGroup?.members ?? []).filter(({ id }) => id !== user.id),
-      ];
-    },
-    [activeGroup?.members, profile.avatar, profile.displayName, user.id],
+  const canManageActiveGroup = Boolean(
+    activeGroup && (!activeGroup.ownerId || activeGroup.ownerId === user.id),
   );
+  const members = useMemo<WorkspaceMember[]>(() => {
+    const localMember: WorkspaceMember = {
+      id: user.id,
+      avatar: profile.avatar,
+      name: profile.displayName,
+      note: 'You',
+      status: 'online',
+    };
+    return [localMember, ...(activeGroup?.members ?? []).filter(({ id }) => id !== user.id)];
+  }, [activeGroup?.members, profile.avatar, profile.displayName, user.id]);
   const availableSounds = useMemo(() => groups.flatMap(({ sounds = [] }) => sounds), [groups]);
   const availableEmotes = useMemo(() => groups.flatMap(({ emotes = [] }) => emotes), [groups]);
   const joinedVoice = groups
-    .flatMap((group) =>
-      group.channels.map((channel) => ({ channel, group })),
-    )
+    .flatMap((group) => group.channels.map((channel) => ({ channel, group })))
     .find(({ channel }) => channel.kind === 'voice' && channel.participantIds.includes(user.id));
   const selectedChannel = activeGroup?.channels.find(
     ({ conversationId }) => conversationId === selectedConversationId,
@@ -566,6 +565,8 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         name,
         description: 'A locally hosted Scuttlebutt group.',
         icon: 'chat',
+        ownerId: user.id,
+        settings: createDefaultServerSettings(),
         channels: [channel],
       };
       await repository.createConversation(conversationForChannel(group, channel));
@@ -750,7 +751,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
 
   const addGroupAsset = (type: 'emote' | 'sound', name: string, dataUrl: string) => {
     if (!activeGroup) return;
-    const safeName = name.trim().replace(/[^a-z0-9_-]/gi, '').slice(0, 24);
+    const safeName = name
+      .trim()
+      .replace(/[^a-z0-9_-]/gi, '')
+      .slice(0, 24);
     if (!safeName) return;
     setGroups((current) =>
       current.map((group) => {
@@ -780,6 +784,33 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       tone: 'info',
       text: `${safeName} was added to ${activeGroup.name}'s ${type === 'sound' ? 'soundboard' : 'emotes'}.`,
     });
+  };
+
+  const openServerSettings = (section: ServerSettingsSection = 'profile') => {
+    if (!activeGroup || !canManageActiveGroup) {
+      setNotice({ tone: 'error', text: 'Only the server owner can manage these settings.' });
+      return;
+    }
+    setWorkspaceMenuOpen(false);
+    setServerSettingsSection(section);
+    setServerSettingsOpen(true);
+  };
+
+  const saveServerSettings = (nextGroup: WorkspaceGroup) => {
+    setGroups((current) => current.map((group) => (group.id === nextGroup.id ? nextGroup : group)));
+    setServerSettingsOpen(false);
+    setNotice({ tone: 'info', text: `${nextGroup.name} settings saved.` });
+  };
+
+  const deleteActiveGroup = () => {
+    if (!activeGroup) return;
+    const remaining = groups.filter(({ id }) => id !== activeGroup.id);
+    setGroups(remaining);
+    setServerSettingsOpen(false);
+    setActiveGroupId(remaining[0]?.id ?? '');
+    setActiveSurface(remaining.length ? 'groups' : 'explore');
+    setSelectedConversationId(remaining[0]?.channels[0]?.conversationId ?? '');
+    setNotice({ tone: 'info', text: `${activeGroup.name} was deleted.` });
   };
 
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
@@ -827,6 +858,15 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 </button>
                 {activeSurface === 'groups' ? (
                   <>
+                    {canManageActiveGroup ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => openServerSettings('profile')}
+                      >
+                        Server Settings
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       role="menuitem"
@@ -844,23 +884,42 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                     >
                       Create channel
                     </button>
-                    <button type="button" role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setAssetDialog('sound'); }}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setAssetDialog('sound');
+                      }}
+                    >
                       Add soundboard sound
                     </button>
-                    <button type="button" role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setAssetDialog('emote'); }}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setAssetDialog('emote');
+                      }}
+                    >
                       Add custom emote
                     </button>
                   </>
                 ) : null}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() =>
-                    setNotice({ tone: 'info', text: 'Local workspace settings opened.' })
-                  }
-                >
-                  Workspace settings
-                </button>
+                {activeSurface !== 'groups' ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() =>
+                      setNotice({
+                        tone: 'info',
+                        text: 'Workspace settings are available inside a server.',
+                      })
+                    }
+                  >
+                    Workspace settings
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </header>
@@ -903,6 +962,8 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 localSpeaking={localSpeaking}
                 members={members}
                 selectedConversationId={selectedConversationId}
+                canManage={canManageActiveGroup}
+                onSettings={() => openServerSettings('profile')}
                 onCreateText={() => setDialogMode('text-channel')}
                 onCreateVoice={() => setDialogMode('voice-channel')}
                 onJoinVoice={joinVoiceChannel}
@@ -1041,7 +1102,11 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                         <VoicePreviewPanel
                           key={selectedConversation.id}
                           connected={selectedChannel?.participantIds.includes(user.id) ?? false}
-                          localUser={{ avatar: profile.avatar, identity: user.id, name: profile.displayName }}
+                          localUser={{
+                            avatar: profile.avatar,
+                            identity: user.id,
+                            name: profile.displayName,
+                          }}
                           roomName={selectedChannel?.name ?? selectedConversation.title}
                           participants={(selectedChannel?.participantIds ?? [])
                             .map((id) => members.find((member) => member.id === id))
@@ -1248,6 +1313,22 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
           onSave={addGroupAsset}
         />
       ) : null}
+      {serverSettingsOpen && activeGroup ? (
+        <ServerSettingsDialog
+          currentUserAvatar={profile.avatar}
+          currentUserId={user.id}
+          currentUserName={profile.displayName}
+          group={activeGroup}
+          initialSection={serverSettingsSection}
+          onCancel={() => setServerSettingsOpen(false)}
+          onDelete={deleteActiveGroup}
+          onInvite={() => {
+            setServerSettingsOpen(false);
+            setGroupInviteOpen(true);
+          }}
+          onSave={saveServerSettings}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1271,7 +1352,9 @@ function VoiceConnectionPanel({
         </span>
         <span>
           <strong>Voice Connected</strong>
-          <small>{channelName} / {groupName}</small>
+          <small>
+            {channelName} / {groupName}
+          </small>
         </span>
         <button type="button" aria-label="Disconnect from voice" onClick={onLeave}>
           <PhoneDisconnect size={19} weight="fill" />
@@ -1281,7 +1364,11 @@ function VoiceConnectionPanel({
         <button type="button" aria-label="Toggle camera" onClick={() => onAction('camera')}>
           <VideoCameraSlash size={20} />
         </button>
-        <button type="button" aria-label="Share screen or application" onClick={() => onAction('share')}>
+        <button
+          type="button"
+          aria-label="Share screen or application"
+          onClick={() => onAction('share')}
+        >
           <MonitorArrowUp size={20} />
         </button>
         <button type="button" aria-label="Open soundboard" onClick={() => onAction('soundboard')}>
@@ -1384,7 +1471,9 @@ function DirectMessageNavigation({
           onClick={onHome}
         >
           <Users size={19} weight="fill" /> Friends
-          {pendingFriendCount > 0 ? <strong className="nav-request-count">{pendingFriendCount}</strong> : null}
+          {pendingFriendCount > 0 ? (
+            <strong className="nav-request-count">{pendingFriendCount}</strong>
+          ) : null}
         </button>
         <button
           type="button"
@@ -1432,6 +1521,7 @@ function DirectMessageNavigation({
 }
 
 function GroupNavigation({
+  canManage,
   currentUserId,
   group,
   localAvatar,
@@ -1440,9 +1530,11 @@ function GroupNavigation({
   onCreateText,
   onCreateVoice,
   onJoinVoice,
+  onSettings,
   onSelectText,
   selectedConversationId,
 }: {
+  canManage: boolean;
   currentUserId: string;
   group: WorkspaceGroup;
   localAvatar: string;
@@ -1451,6 +1543,7 @@ function GroupNavigation({
   onCreateText: () => void;
   onCreateVoice: () => void;
   onJoinVoice: (id: string) => void;
+  onSettings: () => void;
   onSelectText: (id: string) => void;
   selectedConversationId: string;
 }) {
@@ -1459,6 +1552,11 @@ function GroupNavigation({
       <div className="community-heading">
         <span>{group.name}</span>
         <CaretDown size={14} />
+        {canManage ? (
+          <button type="button" aria-label="Server settings" onClick={onSettings}>
+            <GearSix size={16} />
+          </button>
+        ) : null}
         <button type="button" aria-label="Add a group channel" onClick={onCreateText}>
           <Plus size={16} />
         </button>
@@ -1996,112 +2094,120 @@ function LandingPanel({
         </div>
       ) : (
         <>
-        {!isExplore ? (
-          <section className="friend-hub" aria-label="Friends">
-            <div className="friend-hub-heading">
-              <div>
-                <h2>Friends</h2>
-                <p>Requests must be accepted before a direct message opens.</p>
+          {!isExplore ? (
+            <section className="friend-hub" aria-label="Friends">
+              <div className="friend-hub-heading">
+                <div>
+                  <h2>Friends</h2>
+                  <p>Requests must be accepted before a direct message opens.</p>
+                </div>
+                {friendState.incoming.length > 0 ? (
+                  <span>{friendState.incoming.length} pending</span>
+                ) : null}
               </div>
               {friendState.incoming.length > 0 ? (
-                <span>{friendState.incoming.length} pending</span>
+                <div className="friend-request-list">
+                  {friendState.incoming.map((friend) => (
+                    <article className="friend-request-row" key={friend.id}>
+                      <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
+                      <span>
+                        <strong>{friend.name}</strong>
+                        <small>Incoming friend request</small>
+                      </span>
+                      <button
+                        type="button"
+                        className="friend-accept"
+                        aria-label={`Accept ${friend.name}`}
+                        onClick={() => onFriendResponse(friend.id, 'accept')}
+                      >
+                        <Check size={18} weight="bold" />
+                      </button>
+                      <button
+                        type="button"
+                        className="friend-decline"
+                        aria-label={`Decline ${friend.name}`}
+                        onClick={() => onFriendResponse(friend.id, 'decline')}
+                      >
+                        <X size={18} weight="bold" />
+                      </button>
+                    </article>
+                  ))}
+                </div>
               ) : null}
-            </div>
-            {friendState.incoming.length > 0 ? (
-              <div className="friend-request-list">
-                {friendState.incoming.map((friend) => (
-                  <article className="friend-request-row" key={friend.id}>
-                    <PersonAvatar
-                      image={friend.avatarUrl}
-                      name={friend.name}
-                      status="online"
-                    />
-                    <span><strong>{friend.name}</strong><small>Incoming friend request</small></span>
-                    <button
-                      type="button"
-                      className="friend-accept"
-                      aria-label={`Accept ${friend.name}`}
-                      onClick={() => onFriendResponse(friend.id, 'accept')}
-                    ><Check size={18} weight="bold" /></button>
-                    <button
-                      type="button"
-                      className="friend-decline"
-                      aria-label={`Decline ${friend.name}`}
-                      onClick={() => onFriendResponse(friend.id, 'decline')}
-                    ><X size={18} weight="bold" /></button>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-            {friendState.friends.length > 0 ? (
-              <div className="friend-list-grid">
-                {friendState.friends.map((friend) => (
-                  <article className="friend-list-card" key={friend.id}>
-                    <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
-                    <span><strong>{friend.name}</strong><small>{friend.bio || 'Friend'}</small></span>
-                    <ChatCenteredDots size={19} />
-                  </article>
-                ))}
-              </div>
-            ) : friendState.incoming.length === 0 ? (
-              <p className="friend-empty">No friends yet. Share your code or add someone below.</p>
-            ) : null}
-            {friendState.outgoing.length > 0 ? (
-              <div className="outgoing-requests">
-                <strong>Outgoing requests</strong>
-                <span>{friendState.outgoing.map(({ name }) => name).join(', ')}</span>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-        <div className="landing-card-grid">
-          {!isExplore ? (
-            <article className="landing-card friend-code-card">
-              <span className="landing-card-icon">
-                <UserPlus size={23} />
-              </span>
-              <strong>Add friends by code</strong>
-              <span className="friend-code-value">{friendCode}</span>
-              <div className="friend-code-actions">
-                <button
-                  type="button"
-                  onClick={() => void navigator.clipboard.writeText(friendCode)}
-                >
-                  <Copy size={16} /> Copy
-                </button>
-                <button type="button" onClick={onAddFriend}>
-                  <UserPlus size={16} /> Add friend
-                </button>
-              </div>
-            </article>
+              {friendState.friends.length > 0 ? (
+                <div className="friend-list-grid">
+                  {friendState.friends.map((friend) => (
+                    <article className="friend-list-card" key={friend.id}>
+                      <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
+                      <span>
+                        <strong>{friend.name}</strong>
+                        <small>{friend.bio || 'Friend'}</small>
+                      </span>
+                      <ChatCenteredDots size={19} />
+                    </article>
+                  ))}
+                </div>
+              ) : friendState.incoming.length === 0 ? (
+                <p className="friend-empty">
+                  No friends yet. Share your code or add someone below.
+                </p>
+              ) : null}
+              {friendState.outgoing.length > 0 ? (
+                <div className="outgoing-requests">
+                  <strong>Outgoing requests</strong>
+                  <span>{friendState.outgoing.map(({ name }) => name).join(', ')}</span>
+                </div>
+              ) : null}
+            </section>
           ) : null}
-          {groups.map((group) => (
+          <div className="landing-card-grid">
+            {!isExplore ? (
+              <article className="landing-card friend-code-card">
+                <span className="landing-card-icon">
+                  <UserPlus size={23} />
+                </span>
+                <strong>Add friends by code</strong>
+                <span className="friend-code-value">{friendCode}</span>
+                <div className="friend-code-actions">
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(friendCode)}
+                  >
+                    <Copy size={16} /> Copy
+                  </button>
+                  <button type="button" onClick={onAddFriend}>
+                    <UserPlus size={16} /> Add friend
+                  </button>
+                </div>
+              </article>
+            ) : null}
+            {groups.map((group) => (
+              <button
+                type="button"
+                className="landing-card landing-card-button"
+                key={group.id}
+                onClick={() => onOpenGroup(group.id)}
+              >
+                <span className="landing-card-icon">{groupIcon(group.icon)}</span>
+                <strong>{group.name}</strong>
+                <span>{group.description}</span>
+                <small>{group.channels.length} channels</small>
+              </button>
+            ))}
             <button
               type="button"
-              className="landing-card landing-card-button"
-              key={group.id}
-              onClick={() => onOpenGroup(group.id)}
+              className="landing-card landing-card-button landing-card-create"
+              onClick={isExplore ? onCreateGroup : onCreateDm}
             >
-              <span className="landing-card-icon">{groupIcon(group.icon)}</span>
-              <strong>{group.name}</strong>
-              <span>{group.description}</span>
-              <small>{group.channels.length} channels</small>
+              <Plus size={24} />
+              <strong>{isExplore ? 'Create a group' : 'Start a DM'}</strong>
+              <span>
+                {isExplore
+                  ? 'Create channels and invite people.'
+                  : 'Open a private local conversation.'}
+              </span>
             </button>
-          ))}
-          <button
-            type="button"
-            className="landing-card landing-card-button landing-card-create"
-            onClick={isExplore ? onCreateGroup : onCreateDm}
-          >
-            <Plus size={24} />
-            <strong>{isExplore ? 'Create a group' : 'Start a DM'}</strong>
-            <span>
-              {isExplore
-                ? 'Create channels and invite people.'
-                : 'Open a private local conversation.'}
-            </span>
-          </button>
-        </div>
+          </div>
         </>
       )}
     </div>
@@ -2180,7 +2286,9 @@ function ProfileSettingsDialog({
                   Reset
                 </button>
               </div>
-              <small>PNG, JPEG, GIF, or WebP. Large images are resized automatically to 2 MB.</small>
+              <small>
+                PNG, JPEG, GIF, or WebP. Large images are resized automatically to 2 MB.
+              </small>
               {error ? <p role="alert">{error}</p> : null}
             </section>
             <label>
@@ -2506,11 +2614,7 @@ function MembersSidebar({
           </section>
         );
       })}
-      <button
-        type="button"
-        className="invite-button"
-        onClick={onInvite}
-      >
+      <button type="button" className="invite-button" onClick={onInvite}>
         <Users size={17} /> Invite members
       </button>
     </aside>
@@ -2544,15 +2648,22 @@ function GroupInviteDialog({
             <p className="section-kicker">{group.name}</p>
             <h2 id="group-invite-title">Invite friends</h2>
           </div>
-          <button type="button" aria-label="Close invite dialog" onClick={onCancel}><X size={18} /></button>
+          <button type="button" aria-label="Close invite dialog" onClick={onCancel}>
+            <X size={18} />
+          </button>
         </div>
         <p>Invited friends receive access to this server’s text and voice channels.</p>
         <div className="group-invite-list">
           {available.map((friend) => (
             <div className="group-invite-row" key={friend.id}>
               <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
-              <span><strong>{friend.name}</strong><small>Friend</small></span>
-              <button type="button" onClick={() => onInvite(friend.id)}>Invite</button>
+              <span>
+                <strong>{friend.name}</strong>
+                <small>Friend</small>
+              </span>
+              <button type="button" onClick={() => onInvite(friend.id)}>
+                Invite
+              </button>
             </div>
           ))}
           {available.length === 0 ? <p>No additional friends are available to invite.</p> : null}
@@ -2577,12 +2688,17 @@ function GroupAssetDialog({
   const [dataUrl, setDataUrl] = useState('');
   const [error, setError] = useState('');
   const maxBytes = type === 'sound' ? 1_500_000 : 512_000;
-  const accept = type === 'sound' ? 'audio/mpeg,audio/wav,audio/ogg,audio/webm' : 'image/png,image/jpeg,image/gif,image/webp';
+  const accept =
+    type === 'sound'
+      ? 'audio/mpeg,audio/wav,audio/ogg,audio/webm'
+      : 'image/png,image/jpeg,image/gif,image/webp';
   const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     if (file.size > maxBytes || !file.type.startsWith(type === 'sound' ? 'audio/' : 'image/')) {
-      setError(`${type === 'sound' ? 'Sound' : 'Emote'} must be under ${type === 'sound' ? '1.5 MB' : '512 KB'}.`);
+      setError(
+        `${type === 'sound' ? 'Sound' : 'Emote'} must be under ${type === 'sound' ? '1.5 MB' : '512 KB'}.`,
+      );
       return;
     }
     const reader = new FileReader();
@@ -2607,15 +2723,44 @@ function GroupAssetDialog({
         }}
       >
         <div className="creation-dialog-heading">
-          <div><p className="section-kicker">{groupName}</p><h2 id="group-asset-title">Add custom {type}</h2></div>
-          <button type="button" aria-label="Close asset dialog" onClick={onCancel}><X size={18} /></button>
+          <div>
+            <p className="section-kicker">{groupName}</p>
+            <h2 id="group-asset-title">Add custom {type}</h2>
+          </div>
+          <button type="button" aria-label="Close asset dialog" onClick={onCancel}>
+            <X size={18} />
+          </button>
         </div>
-        <label><span>Name</span><input value={name} maxLength={24} onChange={(event) => setName(event.target.value)} placeholder={type === 'sound' ? 'airhorn' : 'pepewave'} /></label>
-        <label className="asset-file-field"><span>{type === 'sound' ? 'Audio file' : 'Emote image'}</span><input type="file" accept={accept} onChange={chooseFile} /></label>
-        {dataUrl && type === 'emote' ? <img className="asset-emote-preview" src={dataUrl} alt="Emote preview" /> : null}
+        <label>
+          <span>Name</span>
+          <input
+            value={name}
+            maxLength={24}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={type === 'sound' ? 'airhorn' : 'pepewave'}
+          />
+        </label>
+        <label className="asset-file-field">
+          <span>{type === 'sound' ? 'Audio file' : 'Emote image'}</span>
+          <input type="file" accept={accept} onChange={chooseFile} />
+        </label>
+        {dataUrl && type === 'emote' ? (
+          <img className="asset-emote-preview" src={dataUrl} alt="Emote preview" />
+        ) : null}
         {dataUrl && type === 'sound' ? <audio controls src={dataUrl} /> : null}
-        {error ? <p className="auth-error" role="alert">{error}</p> : null}
-        <div className="creation-dialog-actions"><button type="button" onClick={onCancel}>Cancel</button><button type="submit" disabled={!name.trim() || !dataUrl}>Add to server</button></div>
+        {error ? (
+          <p className="auth-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="creation-dialog-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!name.trim() || !dataUrl}>
+            Add to server
+          </button>
+        </div>
       </form>
     </div>
   );

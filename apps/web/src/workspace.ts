@@ -35,6 +35,66 @@ export interface WorkspaceChannel {
   participantIds: string[];
 }
 
+export type ServerAccessMode = 'invite-only' | 'apply-to-join' | 'discoverable';
+export type ServerNotificationLevel = 'all' | 'mentions';
+export type ServerSensitiveContentMode = 'none' | 'filter';
+
+export interface ServerRole {
+  color: string;
+  id: string;
+  name: string;
+  permissions: string[];
+}
+
+export interface ServerInvite {
+  code: string;
+  createdAt: string;
+  uses: number;
+}
+
+export interface ServerSettings {
+  access: {
+    ageRestricted: boolean;
+    mode: ServerAccessMode;
+    rules: string[];
+    rulesEnabled: boolean;
+  };
+  bannerColor: string;
+  communityEnabled: boolean;
+  engagement: {
+    activityFeed: boolean;
+    boostMessages: boolean;
+    defaultNotifications: ServerNotificationLevel;
+    inactiveChannelId: string;
+    inactiveTimeoutMinutes: number;
+    replySticker: boolean;
+    setupTips: boolean;
+    systemChannelId: string;
+    welcomeMessages: boolean;
+    widgetEnabled: boolean;
+  };
+  games: string[];
+  iconUrl: string;
+  invites: ServerInvite[];
+  membersInChannelList: boolean;
+  moderation: {
+    customWords: string[];
+    flaggedWords: boolean;
+    mentionSpam: boolean;
+    sensitiveContent: ServerSensitiveContentMode;
+    suspectedSpam: boolean;
+  };
+  privateProfile: boolean;
+  roles: ServerRole[];
+  serverTag: {
+    badge: string;
+    color: string;
+    name: string;
+  };
+  traits: string[];
+  webhooks: string[];
+}
+
 export interface WorkspaceGroup {
   channels: WorkspaceChannel[];
   description: string;
@@ -43,6 +103,8 @@ export interface WorkspaceGroup {
   id: string;
   members?: WorkspaceMember[];
   name: string;
+  ownerId?: string;
+  settings?: ServerSettings;
   sounds?: CustomSound[];
 }
 
@@ -60,12 +122,83 @@ export const AVATARS = {
 
 export const MEMBERS: WorkspaceMember[] = [];
 
+export function createDefaultServerSettings(): ServerSettings {
+  return {
+    access: {
+      ageRestricted: false,
+      mode: 'invite-only',
+      rules: [],
+      rulesEnabled: false,
+    },
+    bannerColor: '#283457',
+    communityEnabled: false,
+    engagement: {
+      activityFeed: true,
+      boostMessages: true,
+      defaultNotifications: 'all',
+      inactiveChannelId: '',
+      inactiveTimeoutMinutes: 5,
+      replySticker: false,
+      setupTips: true,
+      systemChannelId: '',
+      welcomeMessages: true,
+      widgetEnabled: false,
+    },
+    games: [],
+    iconUrl: '',
+    invites: [],
+    membersInChannelList: true,
+    moderation: {
+      customWords: [],
+      flaggedWords: false,
+      mentionSpam: true,
+      sensitiveContent: 'none',
+      suspectedSpam: true,
+    },
+    privateProfile: false,
+    roles: [
+      {
+        color: '#98a2b3',
+        id: 'everyone',
+        name: '@everyone',
+        permissions: ['View channels', 'Send messages', 'Connect to voice'],
+      },
+    ],
+    serverTag: {
+      badge: '*',
+      color: '#5865f2',
+      name: '',
+    },
+    traits: [],
+    webhooks: [],
+  };
+}
+
+export function serverSettingsFor(group: WorkspaceGroup): ServerSettings {
+  const defaults = createDefaultServerSettings();
+  const settings = group.settings;
+  return {
+    ...defaults,
+    ...settings,
+    access: { ...defaults.access, ...settings?.access },
+    engagement: { ...defaults.engagement, ...settings?.engagement },
+    moderation: { ...defaults.moderation, ...settings?.moderation },
+    serverTag: { ...defaults.serverTag, ...settings?.serverTag },
+    games: [...(settings?.games ?? defaults.games)],
+    invites: [...(settings?.invites ?? defaults.invites)],
+    roles: [...(settings?.roles ?? defaults.roles)],
+    traits: [...(settings?.traits ?? defaults.traits)],
+    webhooks: [...(settings?.webhooks ?? defaults.webhooks)],
+  };
+}
+
 export const DEFAULT_GROUPS: WorkspaceGroup[] = [
   {
     id: 'scuttlebutt-labs',
     name: 'Scuttlebutt Labs',
     description: 'A private product community for building Scuttlebutt in the open.',
     icon: 'chat',
+    settings: createDefaultServerSettings(),
     channels: [
       {
         id: 'announcements',
@@ -116,6 +249,7 @@ export const DEFAULT_GROUPS: WorkspaceGroup[] = [
     name: 'Orbit',
     description: 'Planning launches and the next product horizon.',
     icon: 'orbit',
+    settings: createDefaultServerSettings(),
     channels: [
       {
         id: 'orbit-general',
@@ -138,6 +272,7 @@ export const DEFAULT_GROUPS: WorkspaceGroup[] = [
     name: 'Garden',
     description: 'A calm community for ideas, learning, and feedback.',
     icon: 'garden',
+    settings: createDefaultServerSettings(),
     channels: [
       {
         id: 'garden-chat',
@@ -160,6 +295,7 @@ export const DEFAULT_GROUPS: WorkspaceGroup[] = [
     name: 'Summit',
     description: 'Community goals, milestones, and weekly standups.',
     icon: 'summit',
+    settings: createDefaultServerSettings(),
     channels: [
       {
         id: 'trailhead',
