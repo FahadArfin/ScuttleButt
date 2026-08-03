@@ -52,6 +52,7 @@ import {
   type MessagingRepository,
   type ReplyReference,
 } from './messaging.js';
+import type { PresenceIndicatorStatus } from './presence.js';
 import { VoicePreviewPanel } from './voice-preview.js';
 
 interface AppProps {
@@ -73,7 +74,7 @@ interface Member {
   avatar: string;
   name: string;
   note: string;
-  status: 'away' | 'offline' | 'online';
+  status: PresenceIndicatorStatus;
 }
 
 const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
@@ -103,8 +104,8 @@ const MEMBERS: Member[] = [
   { avatar: AVATARS.sam, name: 'Sam Lee', note: 'Online', status: 'online' },
   { avatar: AVATARS.priya, name: 'Priya Shah', note: 'Online', status: 'online' },
   { avatar: AVATARS.jordan, name: 'Jordan Park', note: 'Online', status: 'online' },
-  { avatar: AVATARS.taylor, name: 'Taylor Nguyen', note: 'Away', status: 'away' },
-  { avatar: AVATARS.jordan, name: 'Chris Diaz', note: 'Away', status: 'away' },
+  { avatar: AVATARS.taylor, name: 'Taylor Nguyen', note: 'Idle', status: 'idle' },
+  { avatar: AVATARS.jordan, name: 'Chris Diaz', note: 'Idle', status: 'idle' },
   { avatar: AVATARS.sam, name: 'Riley Chen', note: 'Offline', status: 'offline' },
 ];
 
@@ -152,7 +153,7 @@ export function PersonAvatar({
 }: {
   image?: string | null;
   name: string;
-  status?: Member['status'];
+  status?: PresenceIndicatorStatus;
   size?: 'large' | 'medium' | 'small';
 }) {
   return (
@@ -196,7 +197,7 @@ export function MessageRow({
       data-message-id={message.id}
     >
       <PersonAvatar
-        image={message.own && avatar ? avatar : message.senderAvatar ?? avatarForMessage(message)}
+        image={message.own && avatar ? avatar : (message.senderAvatar ?? avatarForMessage(message))}
         name={message.senderName}
         status="online"
       />
@@ -214,9 +215,16 @@ export function MessageRow({
         ) : null}
         <p className="message-body">
           {(message.body || ' ').split(/(:[a-z0-9_-]+:)/gi).map((part, index) => {
-            const emote = emotes.find(({ name }) => `:${name}:`.toLowerCase() === part.toLowerCase());
+            const emote = emotes.find(
+              ({ name }) => `:${name}:`.toLowerCase() === part.toLowerCase(),
+            );
             return emote ? (
-              <img className="message-custom-emote" src={emote.dataUrl} alt={`:${emote.name}:`} key={`${emote.id}-${index}`} />
+              <img
+                className="message-custom-emote"
+                src={emote.dataUrl}
+                alt={`:${emote.name}:`}
+                key={`${emote.id}-${index}`}
+              />
             ) : (
               <span key={`${part}-${index}`}>{part}</span>
             );
@@ -975,9 +983,9 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
               members={MEMBERS.filter(({ status }) => status === 'online')}
             />
             <MemberGroup
-              title="Away"
+              title="Idle"
               count={2}
-              members={MEMBERS.filter(({ status }) => status === 'away')}
+              members={MEMBERS.filter(({ status }) => status === 'idle')}
             />
             <MemberGroup
               title="Offline"

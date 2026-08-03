@@ -2,6 +2,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 
 import { Pool } from 'pg';
 
+export type PresenceStatus = 'online' | 'idle' | 'dnd' | 'invisible';
+export type FriendPresenceStatus = PresenceStatus | 'offline';
+
 export interface AppUser {
   avatarUrl: string | null;
   backgroundColor: string;
@@ -12,6 +15,7 @@ export interface AppUser {
   joinedServerIds: string[];
   name: string;
   onboardingCompleted: boolean;
+  presence: PresenceStatus;
   tags: string[];
 }
 
@@ -35,6 +39,7 @@ export interface FriendProfile {
   bio: string;
   id: string;
   name: string;
+  presence: FriendPresenceStatus;
   tags: string[];
 }
 
@@ -73,6 +78,7 @@ export class ScuttlebuttDatabase {
         profile_interests text[] NOT NULL DEFAULT '{}',
         joined_server_ids text[] NOT NULL DEFAULT '{}',
         onboarding_completed boolean NOT NULL DEFAULT false,
+        presence text NOT NULL DEFAULT 'online',
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -83,6 +89,7 @@ export class ScuttlebuttDatabase {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_interests text[] NOT NULL DEFAULT '{}';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_server_ids text[] NOT NULL DEFAULT '{}';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed boolean NOT NULL DEFAULT false;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS presence text NOT NULL DEFAULT 'online';
       CREATE TABLE IF NOT EXISTS friend_codes (
         user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         code_digest text UNIQUE NOT NULL,
@@ -206,7 +213,8 @@ export class ScuttlebuttDatabase {
       RETURNING id, email, display_name AS name, avatar_url AS "avatarUrl",
         profile_banner_color AS "backgroundColor", profile_bio AS bio,
         profile_tags AS tags, profile_interests AS interests,
-        joined_server_ids AS "joinedServerIds", onboarding_completed AS "onboardingCompleted"
+        joined_server_ids AS "joinedServerIds", onboarding_completed AS "onboardingCompleted",
+        presence
     `,
       [randomUUID(), input.googleSubject, input.email, input.name, input.avatarUrl ?? null],
     );
@@ -232,7 +240,8 @@ export class ScuttlebuttDatabase {
       RETURNING id, email, display_name AS name, avatar_url AS "avatarUrl",
         profile_banner_color AS "backgroundColor", profile_bio AS bio,
         profile_tags AS tags, profile_interests AS interests,
-        joined_server_ids AS "joinedServerIds", onboarding_completed AS "onboardingCompleted"
+        joined_server_ids AS "joinedServerIds", onboarding_completed AS "onboardingCompleted",
+        presence
     `,
       [
         googleSubject,
@@ -248,6 +257,13 @@ export class ScuttlebuttDatabase {
     const user = result.rows[0];
     if (!user) throw new Error('User profile could not be updated.');
     return user;
+  }
+
+  async updatePresence(userId: string, presence: PresenceStatus): Promise<void> {
+    await this.pool.query('UPDATE users SET presence = $2, updated_at = now() WHERE id = $1', [
+      userId,
+      presence,
+    ]);
   }
 
   async getUserId(googleSubject: string): Promise<string> {
@@ -284,7 +300,8 @@ export class ScuttlebuttDatabase {
 
   async listFriends(userId: string): Promise<FriendState> {
     const profileColumns = `u.id, u.display_name AS name, u.avatar_url AS "avatarUrl",
-      u.profile_bio AS bio, u.profile_tags AS tags`;
+      u.profile_bio AS bio, u.profile_tags AS tags,
+      CASE WHEN u.presence = 'invisible' THEN 'offline' ELSE u.presence END AS presence`;
     const [friends, incoming, outgoing, friendCode] = await Promise.all([
       this.pool.query<FriendProfile>(
         `SELECT ${profileColumns} FROM friendships f
@@ -316,12 +333,14 @@ export class ScuttlebuttDatabase {
   async requestFriend(userId: string, code: string): Promise<FriendProfile> {
     const recipient = await this.pool.query<FriendProfile>(
       `SELECT u.id, u.display_name AS name, u.avatar_url AS "avatarUrl",
-        u.profile_bio AS bio, u.profile_tags AS tags
+        u.profile_bio AS bio, u.profile_tags AS tags,
+        CASE WHEN u.presence = 'invisible' THEN 'offline' ELSE u.presence END AS presence
        FROM friend_codes fc JOIN users u ON u.id = fc.user_id WHERE fc.code_digest = $1`,
       [code],
     );
     const profile = recipient.rows[0];
-    if (!profile) throw Object.assign(new Error('No user has that friend code.'), { statusCode: 404 });
+    if (!profile)
+      throw Object.assign(new Error('No user has that friend code.'), { statusCode: 404 });
     if (profile.id === userId) {
       throw Object.assign(new Error('You cannot add your own friend code.'), { statusCode: 400 });
     }
@@ -365,7 +384,9 @@ export class ScuttlebuttDatabase {
         );
         const profiles = await client.query<FriendProfile>(
           `SELECT id, display_name AS name, avatar_url AS "avatarUrl",
-            profile_bio AS bio, profile_tags AS tags FROM users WHERE id = ANY($1::uuid[])`,
+            profile_bio AS bio, profile_tags AS tags,
+            CASE WHEN presence = 'invisible' THEN 'offline' ELSE presence END AS presence
+            FROM users WHERE id = ANY($1::uuid[])`,
           [[userId, requesterId]],
         );
         const recipient = profiles.rows.find(({ id }) => id === userId)!;
@@ -413,8 +434,8 @@ export class ScuttlebuttDatabase {
   async getWorkspace(userId: string): Promise<SyncedWorkspace | null> {
     const [result, shared] = await Promise.all([
       this.pool.query<{ dms: unknown[]; groups: Record<string, unknown>[] }>(
-      'SELECT groups, dms FROM user_workspace_state WHERE user_id = $1',
-      [userId],
+        'SELECT groups, dms FROM user_workspace_state WHERE user_id = $1',
+        [userId],
       ),
       this.pool.query<{ group_data: Record<string, unknown> }>(
         `SELECT sg.group_data FROM synced_groups sg
@@ -486,7 +507,8 @@ export class ScuttlebuttDatabase {
       );
       const profiles = await client.query<FriendProfile>(
         `SELECT u.id, u.display_name AS name, u.avatar_url AS "avatarUrl",
-          u.profile_bio AS bio, u.profile_tags AS tags
+          u.profile_bio AS bio, u.profile_tags AS tags,
+          CASE WHEN u.presence = 'invisible' THEN 'offline' ELSE u.presence END AS presence
          FROM synced_group_members gm JOIN users u ON u.id = gm.user_id
          WHERE gm.group_id = $1 ORDER BY u.display_name`,
         [group.id],
@@ -498,17 +520,23 @@ export class ScuttlebuttDatabase {
           id: profile.id,
           name: profile.name,
           note: 'Member',
-          status: 'online',
+          status: profile.presence,
         })),
       };
-      await client.query('UPDATE synced_groups SET group_data = $2::jsonb, updated_at = now() WHERE id = $1', [
-        group.id,
-        JSON.stringify(nextGroup),
-      ]);
+      await client.query(
+        'UPDATE synced_groups SET group_data = $2::jsonb, updated_at = now() WHERE id = $1',
+        [group.id, JSON.stringify(nextGroup)],
+      );
       const channels = Array.isArray(group.channels) ? group.channels : [];
       for (const value of channels) {
-        const channel = value as { conversationId?: unknown; kind?: unknown; name?: unknown; participantIds?: unknown[] };
-        if (typeof channel.conversationId !== 'string' || typeof channel.name !== 'string') continue;
+        const channel = value as {
+          conversationId?: unknown;
+          kind?: unknown;
+          name?: unknown;
+          participantIds?: unknown[];
+        };
+        if (typeof channel.conversationId !== 'string' || typeof channel.name !== 'string')
+          continue;
         const isVoice = channel.kind === 'voice';
         const conversation = {
           id: channel.conversationId,
@@ -575,7 +603,10 @@ export class ScuttlebuttDatabase {
   }
 
   async listMessages(userId: string, conversationId: string): Promise<unknown[]> {
-    const result = await this.pool.query<{ avatar_url: string | null; message: Record<string, unknown> }>(
+    const result = await this.pool.query<{
+      avatar_url: string | null;
+      message: Record<string, unknown>;
+    }>(
       `SELECT sm.message, sender.avatar_url FROM synced_messages sm
        JOIN synced_conversation_members m ON m.conversation_id = sm.conversation_id
        JOIN users sender ON sender.id = sm.sender_id

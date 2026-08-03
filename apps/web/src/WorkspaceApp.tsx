@@ -13,12 +13,15 @@ import {
   Bell,
   Camera,
   CaretDown,
+  CaretRight,
   ChatCenteredDots,
   Check,
+  Circle,
   Code,
   Confetti,
   Compass,
   Copy,
+  EyeSlash,
   FileText,
   GearSix,
   Hash,
@@ -27,6 +30,8 @@ import {
   LockSimple,
   MagnifyingGlass,
   Microphone,
+  MinusCircle,
+  Moon,
   Mountains,
   MonitorArrowUp,
   Paperclip,
@@ -55,6 +60,7 @@ import {
   loadFriendState,
   respondToFriendRequest,
   sendFriendRequest,
+  updatePresence,
   type FriendState,
 } from './friends.js';
 import { inviteFriendToGroup } from './groups.js';
@@ -91,6 +97,16 @@ import {
   type WorkspaceMember,
 } from './workspace.js';
 import { ServerSettingsDialog, type ServerSettingsSection } from './server-settings.js';
+import {
+  normalizePresenceStatus,
+  normalizePresenceIndicatorStatus,
+  presenceLabel,
+  publicPresenceStatus,
+  PRESENCE_DESCRIPTIONS,
+  PRESENCE_LABELS,
+  PRESENCE_STATUSES,
+  type PresenceStatus,
+} from './presence.js';
 
 interface WorkspaceAppProps {
   repository?: MessagingRepository;
@@ -112,6 +128,7 @@ interface UserProfile {
   bannerColor: string;
   bio: string;
   displayName: string;
+  presence: PresenceStatus;
   status: string;
 }
 
@@ -121,12 +138,20 @@ function loadProfile(user: SignedInUser): UserProfile {
     bannerColor: user.backgroundColor,
     bio: user.bio,
     displayName: user.name,
+    presence: user.presence,
     status: 'Online',
   };
   try {
+    const storageKey = `${PROFILE_STORAGE_KEY}:${user.id}`;
+    const storedProfile = JSON.parse(
+      localStorage.getItem(storageKey) ??
+        (user.id === 'local-user' ? localStorage.getItem(PROFILE_STORAGE_KEY) : null) ??
+        '{}',
+    ) as Partial<UserProfile>;
     return {
       ...fallback,
-      ...(JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? '{}') as Partial<UserProfile>),
+      ...storedProfile,
+      presence: normalizePresenceStatus(storedProfile.presence ?? user.presence),
     };
   } catch {
     return fallback;
@@ -179,6 +204,13 @@ function groupIcon(icon: WorkspaceGroup['icon']): ReactNode {
   return <ChatCenteredDots size={24} weight="duotone" />;
 }
 
+function PresenceIcon({ status, size = 16 }: { status: PresenceStatus; size?: number }) {
+  if (status === 'idle') return <Moon size={size} weight="fill" />;
+  if (status === 'dnd') return <MinusCircle size={size} weight="fill" />;
+  if (status === 'invisible') return <EyeSlash size={size} weight="bold" />;
+  return <Circle size={size} weight="fill" />;
+}
+
 export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
   const googleCredential = sessionStorage.getItem('scuttlebutt:google-credential');
   const [repository] = useState<MessagingRepository>(
@@ -205,6 +237,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [isSending, setIsSending] = useState(false);
   const [membersVisible, setMembersVisible] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>();
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -244,10 +277,31 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       avatar: profile.avatar,
       name: profile.displayName,
       note: 'You',
-      status: 'online',
+      status: publicPresenceStatus(profile.presence),
     };
-    return [localMember, ...(activeGroup?.members ?? []).filter(({ id }) => id !== user.id)];
-  }, [activeGroup?.members, profile.avatar, profile.displayName, user.id]);
+    const friendsById = new Map(friendState.friends.map((friend) => [friend.id, friend]));
+    const groupMembers = (activeGroup?.members ?? [])
+      .filter(({ id }) => id !== user.id)
+      .map((member) => {
+        const friend = friendsById.get(member.id);
+        return friend
+          ? {
+              ...member,
+              avatar: friend.avatarUrl ?? member.avatar,
+              name: friend.name,
+              status: friend.presence,
+            }
+          : { ...member, status: normalizePresenceIndicatorStatus(member.status) };
+      });
+    return [localMember, ...groupMembers];
+  }, [
+    activeGroup?.members,
+    friendState.friends,
+    profile.avatar,
+    profile.displayName,
+    profile.presence,
+    user.id,
+  ]);
   const availableSounds = useMemo(() => groups.flatMap(({ sounds = [] }) => sounds), [groups]);
   const availableEmotes = useMemo(() => groups.flatMap(({ emotes = [] }) => emotes), [groups]);
   const joinedVoice = groups
@@ -373,8 +427,8 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   }, [cloudWorkspaceExists, customDms, googleCredential, groups, workspaceReady]);
 
   useEffect(() => {
-    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-  }, [profile]);
+    window.localStorage.setItem(`${PROFILE_STORAGE_KEY}:${user.id}`, JSON.stringify(profile));
+  }, [profile, user.id]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -731,7 +785,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             id: friend.id,
             name: friend.name,
             note: 'Member',
-            status: 'online',
+            status: friend.presence,
           },
         ],
       };
@@ -794,6 +848,34 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     setWorkspaceMenuOpen(false);
     setServerSettingsSection(section);
     setServerSettingsOpen(true);
+  };
+
+  const selectPresence = async (next: PresenceStatus) => {
+    const previous = profile.presence;
+    setProfile((current) => ({ ...current, presence: next }));
+    setPresenceMenuOpen(false);
+    setProfileOpen(false);
+    if (!googleCredential) {
+      setNotice({ tone: 'info', text: `Your status is now ${PRESENCE_LABELS[next]}.` });
+      return;
+    }
+    try {
+      await updatePresence(googleCredential, next);
+      const storedUser = sessionStorage.getItem('scuttlebutt:user');
+      if (storedUser) {
+        sessionStorage.setItem(
+          'scuttlebutt:user',
+          JSON.stringify({ ...(JSON.parse(storedUser) as SignedInUser), presence: next }),
+        );
+      }
+      setNotice({ tone: 'info', text: `Your status is now ${PRESENCE_LABELS[next]}.` });
+    } catch (reason) {
+      setProfile((current) => ({ ...current, presence: previous }));
+      setNotice({
+        tone: 'error',
+        text: reason instanceof Error ? reason.message : 'Your status could not be updated.',
+      });
+    }
   };
 
   const saveServerSettings = (nextGroup: WorkspaceGroup) => {
@@ -1000,13 +1082,22 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             <button
               type="button"
               className="user-identity"
-              onClick={() => setProfileOpen((open) => !open)}
+              onClick={() => {
+                setProfileOpen((open) => !open);
+                setPresenceMenuOpen(false);
+              }}
               aria-expanded={profileOpen}
             >
-              <PersonAvatar image={profile.avatar} name={profile.displayName} status="online" />
+              <PersonAvatar
+                image={profile.avatar}
+                name={profile.displayName}
+                status={publicPresenceStatus(profile.presence)}
+              />
               <span>
                 <strong>{profile.displayName}</strong>
-                <small>{profile.status}</small>
+                <small className={`user-presence-${profile.presence}`}>
+                  {presenceLabel(profile.presence)}
+                </small>
               </span>
             </button>
             <IconButton
@@ -1025,7 +1116,13 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             >
               <Headphones size={18} />
             </IconButton>
-            <IconButton label="User settings" onClick={() => setProfileOpen(true)}>
+            <IconButton
+              label="User settings"
+              onClick={() => {
+                setProfileOpen(true);
+                setPresenceMenuOpen(false);
+              }}
+            >
               <GearSix size={18} />
             </IconButton>
             {profileOpen ? (
@@ -1048,11 +1145,57 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                   type="button"
                   onClick={() => {
                     setProfileOpen(false);
+                    setPresenceMenuOpen(false);
                     setProfileDialogOpen(true);
                   }}
                 >
                   <Camera size={16} /> Edit profile
                 </button>
+                <div className="presence-menu-anchor">
+                  <button
+                    type="button"
+                    className="presence-menu-trigger"
+                    aria-haspopup="menu"
+                    aria-expanded={presenceMenuOpen}
+                    onClick={() => setPresenceMenuOpen((open) => !open)}
+                  >
+                    <span className={`presence-menu-icon presence-${profile.presence}`}>
+                      <PresenceIcon status={profile.presence} />
+                    </span>
+                    <span className="presence-menu-copy">
+                      <strong>{presenceLabel(profile.presence)}</strong>
+                      {profile.presence !== 'online' ? (
+                        <small>{PRESENCE_DESCRIPTIONS[profile.presence]}</small>
+                      ) : null}
+                    </span>
+                    <CaretRight size={16} />
+                  </button>
+                  {presenceMenuOpen ? (
+                    <div className="presence-menu" role="menu" aria-label="Set your status">
+                      {PRESENCE_STATUSES.map((status) => (
+                        <button
+                          type="button"
+                          className={`presence-menu-item ${status === profile.presence ? 'active' : ''}`}
+                          key={status}
+                          role="menuitemradio"
+                          aria-checked={status === profile.presence}
+                          onClick={() => void selectPresence(status)}
+                        >
+                          <span className={`presence-menu-icon presence-${status}`}>
+                            <PresenceIcon status={status} />
+                          </span>
+                          <span className="presence-menu-copy">
+                            <strong>{PRESENCE_LABELS[status]}</strong>
+                            {status !== 'online' ? (
+                              <small>{PRESENCE_DESCRIPTIONS[status]}</small>
+                            ) : null}
+                          </span>
+                          {status === profile.presence ? <Check size={16} weight="bold" /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() =>
@@ -1670,7 +1813,7 @@ function ChannelSection({
                     <PersonAvatar
                       image={participant.id === currentUserId ? localAvatar : participant.avatar}
                       name={participant.name}
-                      status="online"
+                      status={participant.status}
                       size="small"
                     />
                     <span>{participant.name}</span>
@@ -2109,7 +2252,11 @@ function LandingPanel({
                 <div className="friend-request-list">
                   {friendState.incoming.map((friend) => (
                     <article className="friend-request-row" key={friend.id}>
-                      <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
+                      <PersonAvatar
+                        image={friend.avatarUrl}
+                        name={friend.name}
+                        status={friend.presence}
+                      />
                       <span>
                         <strong>{friend.name}</strong>
                         <small>Incoming friend request</small>
@@ -2138,7 +2285,11 @@ function LandingPanel({
                 <div className="friend-list-grid">
                   {friendState.friends.map((friend) => (
                     <article className="friend-list-card" key={friend.id}>
-                      <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
+                      <PersonAvatar
+                        image={friend.avatarUrl}
+                        name={friend.name}
+                        status={friend.presence}
+                      />
                       <span>
                         <strong>{friend.name}</strong>
                         <small>{friend.bio || 'Friend'}</small>
@@ -2388,7 +2539,7 @@ function VoiceMembersSidebar({
               <PersonAvatar
                 image={participant.id === currentUserId ? localAvatar : participant.avatar}
                 name={participant.name}
-                status="online"
+                status={participant.status}
                 size="large"
               />
               <span>
@@ -2583,12 +2734,12 @@ function MembersSidebar({
 }) {
   return (
     <aside className="members-sidebar" aria-label="Community members">
-      {(['online', 'away', 'offline'] as const).map((status) => {
+      {(['online', 'idle', 'dnd', 'offline'] as const).map((status) => {
         const statusMembers = members.filter((member) => member.status === status);
         return (
           <section className="member-group" key={status}>
             <h2>
-              {status} — {statusMembers.length}
+              {presenceLabel(status)} — {statusMembers.length}
             </h2>
             <div className="member-list">
               {statusMembers.map((member) => (
@@ -2656,7 +2807,7 @@ function GroupInviteDialog({
         <div className="group-invite-list">
           {available.map((friend) => (
             <div className="group-invite-row" key={friend.id}>
-              <PersonAvatar image={friend.avatarUrl} name={friend.name} status="online" />
+              <PersonAvatar image={friend.avatarUrl} name={friend.name} status={friend.presence} />
               <span>
                 <strong>{friend.name}</strong>
                 <small>Friend</small>

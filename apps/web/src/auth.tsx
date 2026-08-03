@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChatCenteredDots, LockSimple } from '@phosphor-icons/react';
 
 import { OnboardingPage } from './onboarding.js';
+import { normalizePresenceStatus, type PresenceStatus } from './presence.js';
 
 export interface SignedInUser {
   avatarUrl: string | null;
@@ -15,13 +16,16 @@ export interface SignedInUser {
   joinedServerIds: string[];
   name: string;
   onboardingCompleted: boolean;
+  presence: PresenceStatus;
   tags: string[];
 }
 interface GoogleCredentialResponse {
   credential: string;
 }
 
-function normalizeUser(user: Partial<SignedInUser> & Pick<SignedInUser, 'email' | 'id' | 'name'>): SignedInUser {
+function normalizeUser(
+  user: Partial<SignedInUser> & Pick<SignedInUser, 'email' | 'id' | 'name'>,
+): SignedInUser {
   return {
     avatarUrl: user.avatarUrl ?? null,
     backgroundColor: user.backgroundColor ?? '#5865f2',
@@ -33,6 +37,7 @@ function normalizeUser(user: Partial<SignedInUser> & Pick<SignedInUser, 'email' 
     joinedServerIds: user.joinedServerIds ?? [],
     name: user.name,
     onboardingCompleted: user.onboardingCompleted ?? false,
+    presence: normalizePresenceStatus(user.presence),
     tags: user.tags ?? [],
   };
 }
@@ -122,7 +127,11 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
   }, [clientId, user]);
 
   if (user) {
-    return user.onboardingCompleted ? children(user) : <OnboardingPage user={user} onComplete={setUser} />;
+    return user.onboardingCompleted ? (
+      children(user)
+    ) : (
+      <OnboardingPage user={user} onComplete={setUser} />
+    );
   }
   if (clientId === null) {
     return children({
@@ -136,6 +145,7 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
       joinedServerIds: [],
       name: 'Local user',
       onboardingCompleted: true,
+      presence: 'online',
       tags: [],
     });
   }

@@ -1,8 +1,11 @@
+import type { PresenceIndicatorStatus, PresenceStatus } from './presence.js';
+
 export interface FriendProfile {
   avatarUrl: string | null;
   bio: string;
   id: string;
   name: string;
+  presence: PresenceIndicatorStatus;
   tags: string[];
 }
 
@@ -45,4 +48,11 @@ export function respondToFriendRequest(
   action: 'accept' | 'decline',
 ): Promise<{ saved: boolean }> {
   return friendRequest('/api/friends/respond', credential, { action, requesterId });
+}
+
+export function updatePresence(
+  credential: string,
+  presence: PresenceStatus,
+): Promise<{ presence: PresenceStatus; saved: boolean }> {
+  return friendRequest('/api/presence', credential, { presence });
 }

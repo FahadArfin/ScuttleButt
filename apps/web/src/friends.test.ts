@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadFriendState, respondToFriendRequest, sendFriendRequest } from './friends.js';
+import {
+  loadFriendState,
+  respondToFriendRequest,
+  sendFriendRequest,
+  updatePresence,
+} from './friends.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -12,7 +17,9 @@ describe('friend API client', () => {
         ok: true,
         json: async () => ({
           friendCode: 'ABC234',
-          friends: [{ id: 'friend-1', name: 'Taylor', avatarUrl: '/taylor.png', bio: '', tags: [] }],
+          friends: [
+            { id: 'friend-1', name: 'Taylor', avatarUrl: '/taylor.png', bio: '', tags: [] },
+          ],
           incoming: [],
           outgoing: [],
         }),
@@ -43,6 +50,24 @@ describe('friend API client', () => {
       2,
       '/api/friends/respond',
       expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('saves the signed-in user presence through the authenticated endpoint', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ presence: 'idle', saved: true }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await updatePresence('credential', 'idle');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/presence',
+      expect.objectContaining({
+        body: JSON.stringify({ credential: 'credential', presence: 'idle' }),
+        method: 'POST',
+      }),
     );
   });
 });

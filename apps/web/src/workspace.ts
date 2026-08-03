@@ -1,4 +1,5 @@
 import type { Conversation } from './messaging.js';
+import type { PresenceIndicatorStatus } from './presence.js';
 
 export type AppSurface = 'dms' | 'explore' | 'groups' | 'threads';
 export type DialogMode = 'dm' | 'group' | 'text-channel' | 'voice-channel';
@@ -8,7 +9,7 @@ export interface WorkspaceMember {
   id: string;
   name: string;
   note: string;
-  status: 'away' | 'offline' | 'online';
+  status: PresenceIndicatorStatus;
 }
 
 export interface CustomSound {

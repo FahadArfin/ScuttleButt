@@ -681,7 +681,7 @@ img {
   left: 12px;
   z-index: 10;
   display: grid;
-  width: 210px;
+  width: 242px;
   gap: 6px;
   padding: 13px;
   border: 1px solid var(--line);
@@ -703,6 +703,142 @@ img {
   background: var(--accent-soft);
   font-size: 0.69rem;
   text-align: left;
+}
+
+.presence-menu-anchor {
+  position: relative;
+}
+
+.presence-menu-trigger {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #e4e9ff;
+  background: var(--accent-soft);
+}
+
+.presence-menu-trigger:hover,
+.presence-menu-trigger[aria-expanded='true'] {
+  border-color: rgb(139 155 255 / 28%);
+  background: #303b58;
+}
+
+.presence-menu-trigger > svg {
+  margin-left: auto;
+  color: #9ba7c2;
+}
+
+.presence-menu-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.presence-menu-icon.presence-online {
+  color: var(--success);
+}
+
+.presence-menu-icon.presence-idle {
+  color: var(--warning);
+}
+
+.presence-menu-icon.presence-dnd {
+  color: var(--danger);
+}
+
+.presence-menu-icon.presence-invisible,
+.presence-menu-icon.presence-offline {
+  color: #8c95a7;
+}
+
+.presence-menu-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+  text-align: left;
+}
+
+.profile-popover .presence-menu-copy strong {
+  overflow: hidden;
+  color: #eef1f8;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-popover .presence-menu-copy small {
+  overflow: hidden;
+  color: #9ca6bb;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presence-menu {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% + 8px);
+  z-index: 20;
+  display: grid;
+  width: 235px;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid #3a4353;
+  border-radius: 9px;
+  background: #202735;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 35%);
+}
+
+.profile-popover .presence-menu-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 0;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #e4e9f4;
+  background: transparent;
+}
+
+.profile-popover .presence-menu-item:hover,
+.profile-popover .presence-menu-item.active {
+  border-color: rgb(139 155 255 / 24%);
+  background: #303b58;
+}
+
+.profile-popover .presence-menu-item > svg {
+  margin-left: auto;
+  color: #b9c4df;
+}
+
+.user-presence-online {
+  color: var(--success) !important;
+}
+
+.user-presence-idle {
+  color: var(--warning) !important;
+}
+
+.user-presence-dnd {
+  color: var(--danger) !important;
+}
+
+.user-presence-invisible {
+  color: #9aa4b7 !important;
 }
 
 .conversation-main {
@@ -1458,6 +1594,14 @@ img {
 
 .presence-away {
   background: var(--warning);
+}
+
+.presence-idle {
+  background: var(--warning);
+}
+
+.presence-dnd {
+  background: var(--danger);
 }
 
 .presence-offline {
@@ -4626,6 +4770,20 @@ img {
 }
 
 @media (max-width: 650px) {
+  .profile-popover {
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-width: calc(100% - 20px);
+  }
+
+  .presence-menu {
+    right: 0;
+    bottom: calc(100% + 8px);
+    left: auto;
+    width: min(235px, calc(100vw - 32px));
+  }
+
   .server-settings-backdrop {
     padding: 0;
   }

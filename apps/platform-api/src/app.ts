@@ -21,6 +21,8 @@ interface GoogleCredentialBody {
   credential: string;
 }
 
+type PresenceStatus = 'online' | 'idle' | 'dnd' | 'invisible';
+
 interface ProfileBody extends GoogleCredentialBody {
   profile: {
     avatarUrl: string | null;
@@ -31,6 +33,10 @@ interface ProfileBody extends GoogleCredentialBody {
     name: string;
     tags: string[];
   };
+}
+
+interface PresenceBody extends GoogleCredentialBody {
+  presence: PresenceStatus;
 }
 
 interface WorkspaceBody extends GoogleCredentialBody {
@@ -137,6 +143,7 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
           interests: [],
           joinedServerIds: [],
           onboardingCompleted: false,
+          presence: 'online',
         };
     const friendCode = database ? await database.getOrCreateFriendCode(user.id) : null;
     return { user: { ...user, friendCode } };
@@ -174,7 +181,10 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
       interests: profile.interests.slice(0, 8),
       joinedServerIds: profile.joinedServerIds.slice(0, 12),
       name: profile.name.trim(),
-      tags: profile.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 5),
+      tags: profile.tags
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .slice(0, 5),
     };
     const user = database
       ? await database.updateUserProfile(payload.sub, sanitized)
@@ -186,6 +196,15 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
         };
     const friendCode = database ? await database.getOrCreateFriendCode(user.id) : null;
     return { user: { ...user, friendCode } };
+  });
+
+  app.post<{ Body: PresenceBody }>('/api/presence', async (request, reply) => {
+    const userId = await authenticate(request.body.credential);
+    if (!['online', 'idle', 'dnd', 'invisible'].includes(request.body.presence)) {
+      return reply.code(400).send({ error: 'Presence status is invalid.' });
+    }
+    await database!.updatePresence(userId, request.body.presence);
+    return { presence: request.body.presence, saved: true };
   });
 
   app.post<{ Body: GoogleCredentialBody }>('/api/friends/list', async (request) => {
