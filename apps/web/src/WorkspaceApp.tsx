@@ -63,6 +63,7 @@ import { E2E_SELECTORS } from '@scuttlebutt/testing';
 import { MessageRow, PersonAvatar } from './App.js';
 import type { SignedInUser } from './auth.js';
 import { optimizeAvatar } from './image-utils.js';
+import { MediaPicker, type MediaAsset } from './media-picker.js';
 import {
   loadFriendState,
   respondToFriendRequest,
@@ -656,6 +657,36 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       })),
     ]);
     event.currentTarget.value = '';
+  };
+
+  const handleMediaSelect = (asset: MediaAsset) => {
+    if (asset.value) {
+      setComposer((current) => `${current}${current ? ' ' : ''}${asset.value}`);
+      return;
+    }
+    if (!asset.url || (asset.kind !== 'gif' && asset.kind !== 'sticker')) return;
+    const mediaKind = asset.kind;
+    setAttachments((current) => {
+      if (current.some((attachment) => attachment.id === `media-${asset.id}`)) return current;
+      return [
+        ...current,
+        {
+          alt: asset.label,
+          id: `media-${asset.id}`,
+          kind: mediaKind,
+          mimeType: mediaKind === 'gif' ? 'image/gif' : 'image/webp',
+          name: asset.label,
+          previewUrl: asset.previewUrl ?? asset.url,
+          size: 0,
+          source: asset.source ?? 'GIPHY',
+          url: asset.url,
+        },
+      ];
+    });
+    setNotice({
+      tone: 'info',
+      text: `${asset.kind === 'gif' ? 'GIF' : 'Sticker'} added to your message.`,
+    });
   };
 
   const handleDelete = async (message: Message) => {
@@ -1625,6 +1656,12 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                     onInsert={(value) =>
                       setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
                     }
+                    onMediaSelect={handleMediaSelect}
+                    onOpenEmojiSettings={
+                      activeSurface === 'groups' && canManageActiveGroup
+                        ? () => openServerSettings('emoji')
+                        : undefined
+                    }
                     onKeyDown={handleComposerKeyDown}
                     onRemoveAttachment={(id) =>
                       setAttachments((current) => current.filter((item) => item.id !== id))
@@ -1687,6 +1724,12 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               onFiles={handleFiles}
               onInsert={(value) =>
                 setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
+              }
+              onMediaSelect={handleMediaSelect}
+              onOpenEmojiSettings={
+                activeSurface === 'groups' && canManageActiveGroup
+                  ? () => openServerSettings('emoji')
+                  : undefined
               }
               onKeyDown={handleComposerKeyDown}
               onRemoveAttachment={(id) =>
@@ -2137,6 +2180,16 @@ function GroupNavigation({
 
   return (
     <div className="group-channel-navigation" onContextMenu={handleContextMenu}>
+      <div
+        className="group-server-banner"
+        style={{ backgroundColor: serverSettingsFor(group).bannerColor }}
+      >
+        <ServerProfileIcon className="group-server-banner-icon" group={group} />
+        <div>
+          <strong>{group.name}</strong>
+          <span>{group.description}</span>
+        </div>
+      </div>
       <div className="community-heading">
         <div className="community-heading-title">
           <ServerProfileIcon className="community-heading-icon" group={group} />
@@ -3310,6 +3363,8 @@ function Composer({
   onFiles,
   onInsert,
   onKeyDown,
+  onMediaSelect,
+  onOpenEmojiSettings,
   onRemoveAttachment,
   onSubmit,
   replyTo,
@@ -3326,11 +3381,13 @@ function Composer({
   onFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onInsert: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onMediaSelect: (asset: MediaAsset) => void;
+  onOpenEmojiSettings?: () => void;
   onRemoveAttachment: (id: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   replyTo?: ReplyReference;
 }) {
-  const [emotePickerOpen, setEmotePickerOpen] = useState(false);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   return (
     <form className="composer-shell" data-testid={E2E_SELECTORS.composer} onSubmit={onSubmit}>
       {editingMessage || replyTo ? (
@@ -3415,45 +3472,20 @@ function Composer({
               type="button"
               className="composer-tool"
               aria-label="Add emoji or custom emote"
-              aria-expanded={emotePickerOpen}
-              onClick={() => setEmotePickerOpen((open) => !open)}
+              aria-expanded={mediaPickerOpen}
+              onClick={() => setMediaPickerOpen((open) => !open)}
             >
               <Smiley size={19} />
             </button>
-            {emotePickerOpen ? (
-              <div className="emote-picker" role="dialog" aria-label="Emoji and custom emotes">
-                <strong>Emoji</strong>
-                <div className="emote-grid">
-                  {['✨', '❤️', '👍', '😂', '🎮', '🐸'].map((emoji) => (
-                    <button
-                      type="button"
-                      key={emoji}
-                      onClick={() => {
-                        onInsert(emoji);
-                        setEmotePickerOpen(false);
-                      }}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-                {emotes.length > 0 ? <strong>From your servers</strong> : null}
-                <div className="emote-grid">
-                  {emotes.map((emote) => (
-                    <button
-                      type="button"
-                      key={emote.id}
-                      title={`:${emote.name}: · ${emote.sourceGroupName}`}
-                      onClick={() => {
-                        onInsert(`:${emote.name}:`);
-                        setEmotePickerOpen(false);
-                      }}
-                    >
-                      <img src={emote.dataUrl} alt={emote.name} />
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {mediaPickerOpen ? (
+              <MediaPicker
+                emotes={emotes}
+                onManageEmoji={onOpenEmojiSettings}
+                onSelect={(asset) => {
+                  onMediaSelect(asset);
+                  setMediaPickerOpen(false);
+                }}
+              />
             ) : null}
           </div>
           <button
@@ -3871,6 +3903,8 @@ function VoiceChatSidebar({
   onFiles,
   onInsert,
   onKeyDown,
+  onMediaSelect,
+  onOpenEmojiSettings,
   onReact,
   onRemoveAttachment,
   onReply,
@@ -3895,6 +3929,8 @@ function VoiceChatSidebar({
   onFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onInsert: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onMediaSelect: (asset: MediaAsset) => void;
+  onOpenEmojiSettings?: () => void;
   onReact: (message: Message, emoji: string) => void;
   onRemoveAttachment: (id: string) => void;
   onReply: (message: Message) => void;
@@ -3943,6 +3979,8 @@ function VoiceChatSidebar({
         onFiles={onFiles}
         onInsert={onInsert}
         onKeyDown={onKeyDown}
+        onMediaSelect={onMediaSelect}
+        onOpenEmojiSettings={onOpenEmojiSettings}
         onRemoveAttachment={onRemoveAttachment}
         onSubmit={onSubmit}
       />

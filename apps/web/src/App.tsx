@@ -54,6 +54,7 @@ import {
 } from './messaging.js';
 import type { PresenceIndicatorStatus } from './presence.js';
 import { VoicePreviewPanel } from './voice-preview.js';
+import { MediaPicker, type MediaAsset } from './media-picker.js';
 
 interface AppProps {
   repository?: MessagingRepository;
@@ -118,6 +119,30 @@ function formatFileSize(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function parseMediaReaction(
+  value: string,
+): { kind: 'gif' | 'sticker'; url: string; previewUrl: string } | undefined {
+  if (!value.startsWith('media:')) return undefined;
+  const [kind, encodedUrl, encodedPreview] = value.slice('media:'.length).split(':');
+  if ((kind !== 'gif' && kind !== 'sticker') || !encodedUrl) return undefined;
+  try {
+    const url = decodeURIComponent(encodedUrl);
+    return {
+      kind,
+      previewUrl: encodedPreview ? decodeURIComponent(encodedPreview) : url,
+      url,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function reactionValueForAsset(asset: MediaAsset): string | undefined {
+  if (asset.value) return asset.value;
+  if (!asset.url || (asset.kind !== 'gif' && asset.kind !== 'sticker')) return undefined;
+  return `media:${asset.kind}:${encodeURIComponent(asset.url)}:${encodeURIComponent(asset.previewUrl ?? asset.url)}`;
 }
 
 function IconButton({
@@ -190,6 +215,8 @@ export function MessageRow({
   onReply: (message: Message) => void;
   onRetry: (message: Message) => void;
 }) {
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+
   return (
     <article
       className={`message-row ${message.own ? 'message-row-own' : ''}`}
@@ -232,21 +259,43 @@ export function MessageRow({
         </p>
         {message.attachments.length > 0 ? (
           <div className="message-attachments" aria-label="Message attachments">
-            {message.attachments.map((attachment) => (
-              <div className="message-attachment" key={attachment.id}>
-                <span className="attachment-icon" aria-hidden="true">
-                  {attachment.mimeType.includes('code') || attachment.name.endsWith('.md') ? (
-                    <Code size={20} weight="duotone" />
-                  ) : (
-                    <FileText size={20} weight="duotone" />
-                  )}
-                </span>
-                <span>
-                  <strong>{attachment.name}</strong>
-                  <small>{formatFileSize(attachment.size)}</small>
-                </span>
-              </div>
-            ))}
+            {message.attachments.map((attachment) =>
+              attachment.url ? (
+                <a
+                  className="message-attachment message-media-attachment"
+                  href={attachment.url}
+                  key={attachment.id}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <img
+                    src={attachment.previewUrl ?? attachment.url}
+                    alt={attachment.alt ?? attachment.name}
+                    loading="lazy"
+                  />
+                  <span>
+                    <strong>{attachment.name}</strong>
+                    <small>
+                      {attachment.source ?? (attachment.kind === 'sticker' ? 'Sticker' : 'GIF')}
+                    </small>
+                  </span>
+                </a>
+              ) : (
+                <div className="message-attachment" key={attachment.id}>
+                  <span className="attachment-icon" aria-hidden="true">
+                    {attachment.mimeType.includes('code') || attachment.name.endsWith('.md') ? (
+                      <Code size={20} weight="duotone" />
+                    ) : (
+                      <FileText size={20} weight="duotone" />
+                    )}
+                  </span>
+                  <span>
+                    <strong>{attachment.name}</strong>
+                    <small>{formatFileSize(attachment.size)}</small>
+                  </span>
+                </div>
+              ),
+            )}
           </div>
         ) : null}
         <div className="message-actions">
@@ -292,27 +341,56 @@ export function MessageRow({
             </>
           ) : null}
         </div>
-        {Object.keys(message.reactions).length > 0 ? (
-          <div className="reaction-list" aria-label="Message reactions">
-            {Object.entries(message.reactions).map(([emoji, count]) => (
-              <button
-                type="button"
-                className="reaction-pill"
-                key={emoji}
-                onClick={() => onReact(message, emoji)}
-              >
-                {(() => {
-                  const emote = emotes.find(({ name }) => `:${name}:` === emoji);
-                  return emote ? <img src={emote.dataUrl} alt={emoji} /> : emoji;
-                })()}{' '}
-                <span>{count}</span>
-              </button>
-            ))}
-            <button type="button" className="reaction-add" aria-label="Add reaction">
+        <div className="reaction-list" aria-label="Message reactions">
+          {Object.entries(message.reactions).map(([emoji, count]) => (
+            <button
+              type="button"
+              className="reaction-pill"
+              key={emoji}
+              onClick={() => onReact(message, emoji)}
+            >
+              {(() => {
+                const mediaReaction = parseMediaReaction(emoji);
+                const emote = emotes.find(({ name }) => `:${name}:` === emoji);
+                if (mediaReaction) {
+                  return (
+                    <img
+                      className="reaction-media-image"
+                      src={mediaReaction.previewUrl}
+                      alt={`Shared ${mediaReaction.kind}`}
+                    />
+                  );
+                }
+                return emote ? <img src={emote.dataUrl} alt={emoji} /> : emoji;
+              })()}{' '}
+              <span>{count}</span>
+            </button>
+          ))}
+          <div className="reaction-add-wrap">
+            <button
+              type="button"
+              className="reaction-add"
+              aria-label="Add reaction"
+              aria-expanded={reactionPickerOpen}
+              onClick={() => setReactionPickerOpen((open) => !open)}
+            >
               <Smiley size={14} />
             </button>
+            {reactionPickerOpen ? (
+              <div className="reaction-picker-popover">
+                <MediaPicker
+                  emotes={emotes}
+                  initialTab="emoji"
+                  onSelect={(asset) => {
+                    const value = reactionValueForAsset(asset);
+                    if (value) onReact(message, value);
+                    setReactionPickerOpen(false);
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
         {message.status === 'failed' ? (
           <div className="message-failure" role="alert">
             <span>Not sent</span>

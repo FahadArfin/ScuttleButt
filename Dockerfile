@@ -3,6 +3,8 @@ WORKDIR /app
 RUN corepack enable
 COPY . .
 RUN pnpm install --frozen-lockfile
+ARG VITE_GIPHY_API_KEY=""
+ENV VITE_GIPHY_API_KEY=$VITE_GIPHY_API_KEY
 RUN pnpm build
 
 FROM node:22-bookworm-slim AS runtime

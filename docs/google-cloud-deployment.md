@@ -43,8 +43,13 @@ The workflow requires these GitHub repository secrets:
 - `GCP_REGION`
 - `GCP_SERVICE_ACCOUNT`
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `VITE_GIPHY_API_KEY` (optional; enables GIF and sticker search in the picker)
 
 A local commit does not trigger GitHub Actions until it is pushed to `origin/development`.
+
+The GIPHY key is embedded in the browser bundle when enabled, so treat it as a restricted client
+key and configure its domain/rate limits in GIPHY. If it is omitted, Unicode and server emoji still
+work and GIF/sticker tabs show a setup message instead of failing.
 
 After the first deployment, copy the Cloud Run URL into the OAuth client's authorized JavaScript origins. The deployed service already uses that exact HTTPS origin for CORS.
 

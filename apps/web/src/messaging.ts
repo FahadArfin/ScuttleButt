@@ -29,9 +29,14 @@ export interface ReplyReference {
 
 export interface AttachmentDraft {
   id: string;
+  alt?: string;
+  kind?: 'file' | 'gif' | 'image' | 'sticker';
   name: string;
+  previewUrl?: string;
   size: number;
   mimeType: string;
+  source?: string;
+  url?: string;
 }
 
 export interface Message {
@@ -293,7 +298,10 @@ function cloneMessage(message: Message): Message {
   };
 }
 
-export function createDemoMessagingRepository(user?: { id: string; name: string }): MessagingRepository {
+export function createDemoMessagingRepository(user?: {
+  id: string;
+  name: string;
+}): MessagingRepository {
   const conversations: Conversation[] = [];
   const messages: Record<string, Message[]> = {};
   const currentUser = {
@@ -467,20 +475,24 @@ export function createSyncedMessagingRepository(
         attachments: options.attachments ? [...options.attachments] : [],
         reactions: {},
       };
-      const result = await syncRequest<{ message: Message }>(
-        '/api/sync/messages',
-        credential,
-        { conversationId, message },
-      );
+      const result = await syncRequest<{ message: Message }>('/api/sync/messages', credential, {
+        conversationId,
+        message,
+      });
       return normalizeMessage(result.message);
     },
 
     async editMessage(conversationId, messageId, body) {
-      await syncRequest('/api/sync/messages/edit', credential, {
-        conversationId,
-        messageId,
-        value: body,
-      }, 'PATCH');
+      await syncRequest(
+        '/api/sync/messages/edit',
+        credential,
+        {
+          conversationId,
+          messageId,
+          value: body,
+        },
+        'PATCH',
+      );
     },
 
     async deleteMessage(conversationId, messageId) {
@@ -513,10 +525,7 @@ export function createSyncedMessagingRepository(
 }
 
 export async function loadSyncedWorkspace<T>(credential: string): Promise<T | null> {
-  const result = await syncRequest<{ workspace: T | null }>(
-    '/api/sync/workspace/load',
-    credential,
-  );
+  const result = await syncRequest<{ workspace: T | null }>('/api/sync/workspace/load', credential);
   return result.workspace;
 }
 

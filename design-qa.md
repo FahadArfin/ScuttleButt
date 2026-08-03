@@ -73,6 +73,45 @@ The reference contains Discord-specific avatar art, OS tray chrome, and account 
 
 final result: passed
 
+## Server banner theme and media picker QA
+
+### Comparison targets
+
+- Server banner and profile icon reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-4d9d050f-d74f-456f-8149-d3d5a9d4b32c.png`
+- Cross-workspace theme reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-5693a85c-e059-42d8-967f-f228fee65479.png`
+- GIF/sticker/emoji picker reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-153b30a0-e8a9-4519-9ac2-69ba78ee0bba.png`
+- Implementation screenshot: `C:/Users/fahad/AppData/Local/Temp/scuttlebutt-server-theme.png`
+- Implementation screenshot with GIF fallback state: `C:/Users/fahad/AppData/Local/Temp/scuttlebutt-media-picker.png`
+- Implementation URL: `http://localhost:5173/`
+- Browser state: reze group, general text channel, media picker open on GIFs, 1280 x 720 CSS viewport (DPR 1).
+
+### Evidence and comparison
+
+- Source banner pixels: 1745 x 747; source theme pixels: 2493 x 1094; source picker pixels: 531 x 560.
+- Implementation pixels: 1280 x 720 for both captures; the browser screenshot includes the complete app viewport at the same CSS dimensions used for interaction QA.
+- The source and implementation were inspected together. The focused comparison regions were the left workspace banner, the selected channel/theme surfaces, the picker tab/search hierarchy, and the reaction affordance treatment. Discord-specific avatars, content, and browser chrome remain reference context rather than copied assets.
+- The server profile icon now appears inside the colored group banner and is reused in the server heading and rail. The selected banner color propagates through the workspace title bar, trust row, channel selection, conversation header/body, members panel, composer, and primary actions.
+- The picker follows the reference hierarchy with GIFs, Stickers, and Emoji tabs, scoped search, server emoji, and a compact anchored surface. GIF and sticker results are wired to the optional GIPHY client-side Search/Trending endpoints; with no key configured, the UI gives a clear setup state while Unicode/server emoji remain usable offline.
+- GIFs and stickers can be attached to messages and encoded as media reactions; custom server emoji can be inserted into messages or used as reactions. The picker is also available from voice chat text.
+
+### Findings
+
+No actionable P0, P1, or P2 findings remain.
+
+The supplied references show Discord-specific pink/red themes and content. Scuttlebutt derives the workspace theme from each server's saved banner color, so the same full-surface treatment applies when a server chooses pink, purple, or another supported color.
+
+### Implementation checklist
+
+- [x] Server icon shown in the group banner/header.
+- [x] Saved banner color propagated across group workspace surfaces.
+- [x] GIF, sticker, and emoji tabs with search and custom server emoji.
+- [x] Optional GIPHY API adapter with an offline fallback state.
+- [x] GIF/sticker message attachments and media reactions.
+- [x] Composer and voice-chat composer support the shared media picker.
+- [x] Browser interaction checks, console-error check, typecheck, lint, unit tests, production build, and Docker build completed.
+
+final result: passed
+
 ## Server administration, forums, and events QA
 
 ### Comparison targets

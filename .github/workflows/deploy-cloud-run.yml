@@ -48,8 +48,9 @@ jobs:
       - name: Build application container
         env:
           IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/app
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
         run: |
-          docker build --tag "$IMAGE:$GITHUB_SHA" --tag "$IMAGE:development" .
+          docker build --build-arg "VITE_GIPHY_API_KEY=$VITE_GIPHY_API_KEY" --tag "$IMAGE:$GITHUB_SHA" --tag "$IMAGE:development" .
 
       - name: Push application container
         env:
