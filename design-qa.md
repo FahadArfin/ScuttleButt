@@ -85,7 +85,7 @@ final result: passed
 
 ### Comparison and interaction findings
 
-- The server menu follows the supplied Discord hierarchy with Hide muted channels, Create channel, Create category, and Invite to server actions. Menu actions are keyboard-addressable and the menu closes when a channel is selected.
+- Right-clicking a channel opens a cursor-anchored Discord-style context menu with Mute channel, Create Channel, Create category, and Invite to server actions. Right-clicking empty group navigation exposes the server-level Hide muted channels action. Menu actions are keyboard-addressable and the menu closes after an action.
 - Channel creation supports Text, Voice, and Forum types, optional category placement, and private-channel role selection. Private channels with no selected role remain owner-only; members with an allowed role are admitted by the channel visibility predicate.
 - Forum channels provide a search/create-post toolbar, focused subject cards, and inline replies. The created post and reply persisted through the workspace state path during browser QA.
 - Events open as a focused side panel, list upcoming events, and use a three-step Location, Event Info, and Review flow. Voice-channel and external/IRL locations, recurrence, cover images, and text-channel announcements were exercised. A created event appeared in the Events list and its announcement appeared in the selected text channel.
@@ -93,7 +93,7 @@ final result: passed
 
 ### Implementation checklist
 
-- [x] Server context menu with mute visibility, channel/category creation, and server invites.
+- [x] Right-click channel context menu with mute visibility, channel/category creation, and server invites.
 - [x] Collapsible categories with text, voice, and forum channel sections.
 - [x] Private channel role controls and visibility filtering.
 - [x] Forum posts, search, thread replies, and persistence through the workspace model.

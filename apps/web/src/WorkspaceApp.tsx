@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
 } from 'react';
 
@@ -2028,7 +2029,11 @@ function GroupNavigation({
   onSelectText: (id: string) => void;
   selectedConversationId: string;
 }) {
-  const [serverMenuOpen, setServerMenuOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    channelId?: string;
+    x: number;
+    y: number;
+  }>();
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const visibleChannels = group.channels.filter(
     (channel) =>
@@ -2036,16 +2041,43 @@ function GroupNavigation({
       (!hideMutedChannels || !channel.muted),
   );
   const categories = group.categories ?? [];
-  const runServerAction = (action: () => void) => {
-    setServerMenuOpen(false);
+  const contextChannel = contextMenu?.channelId
+    ? group.channels.find(({ id }) => id === contextMenu.channelId)
+    : undefined;
+
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const closeMenu = () => setContextMenu(undefined);
+    window.addEventListener('click', closeMenu);
+    window.addEventListener('blur', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    return () => {
+      window.removeEventListener('click', closeMenu);
+      window.removeEventListener('blur', closeMenu);
+      window.removeEventListener('resize', closeMenu);
+    };
+  }, [contextMenu]);
+
+  const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const target = event.target as HTMLElement;
+    const channelId = target.closest<HTMLElement>('[data-channel-id]')?.dataset.channelId;
+    setContextMenu({
+      channelId,
+      x: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 232)),
+      y: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 190)),
+    });
+  };
+
+  const runContextAction = (action: () => void) => {
+    setContextMenu(undefined);
     action();
   };
+
   const selectChannel = (conversationId: string) => {
-    setServerMenuOpen(false);
     onSelectText(conversationId);
   };
   const joinVoice = (conversationId: string) => {
-    setServerMenuOpen(false);
     onJoinVoice(conversationId);
   };
 
@@ -2104,19 +2136,12 @@ function GroupNavigation({
   };
 
   return (
-    <>
+    <div className="group-channel-navigation" onContextMenu={handleContextMenu}>
       <div className="community-heading">
-        <button
-          type="button"
-          className="community-heading-trigger"
-          aria-expanded={serverMenuOpen}
-          aria-label={`${group.name} server menu`}
-          onClick={() => setServerMenuOpen((open) => !open)}
-        >
+        <div className="community-heading-title">
           <ServerProfileIcon className="community-heading-icon" group={group} />
           <span className="community-heading-name">{group.name}</span>
-          <CaretDown size={14} />
-        </button>
+        </div>
         {canManage ? (
           <button type="button" aria-label="Server settings" onClick={onSettings}>
             <GearSix size={16} />
@@ -2125,31 +2150,6 @@ function GroupNavigation({
         <button type="button" aria-label="Add a group channel" onClick={onCreateText}>
           <Plus size={16} />
         </button>
-        {serverMenuOpen ? (
-          <div className="server-context-menu" role="menu" aria-label={`${group.name} actions`}>
-            <button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={hideMutedChannels}
-              onClick={onToggleHideMuted}
-            >
-              <BellSlash size={16} />
-              <span>{hideMutedChannels ? 'Show muted channels' : 'Hide muted channels'}</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runServerAction(onCreateChannel)}>
-              <Plus size={16} />
-              <span>Create channel</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runServerAction(onCreateCategory)}>
-              <Plus size={16} />
-              <span>Create category</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runServerAction(onInvite)}>
-              <UserPlus size={16} />
-              <span>Invite to server</span>
-            </button>
-          </div>
-        ) : null}
       </div>
       <button type="button" className="server-events-button" onClick={onEvents}>
         <CalendarBlank size={18} />
@@ -2190,7 +2190,52 @@ function GroupNavigation({
           </section>
         );
       })}
-    </>
+      {contextMenu ? (
+        <div
+          className="channel-context-menu"
+          role="menu"
+          aria-label={`${group.name} channel actions`}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() =>
+              contextChannel
+                ? runContextAction(() => onToggleMute(contextChannel.id))
+                : runContextAction(onToggleHideMuted)
+            }
+          >
+            {contextChannel?.muted ? <BellSlash size={16} /> : <Bell size={16} />}
+            <span>
+              {contextChannel
+                ? contextChannel.muted
+                  ? 'Unmute channel'
+                  : 'Mute channel'
+                : hideMutedChannels
+                  ? 'Show muted channels'
+                  : 'Hide muted channels'}
+            </span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => runContextAction(onCreateChannel)}>
+            <Plus size={16} />
+            <span>Create Channel</span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => runContextAction(onCreateCategory)}>
+            <Plus size={16} />
+            <span>Create category</span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => runContextAction(onInvite)}>
+            <UserPlus size={16} />
+            <span>Invite to server</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -2238,7 +2283,7 @@ function ChannelSection({
         const active = selectedConversationId === channel.conversationId;
         if (type === 'text' || type === 'forum') {
           return (
-            <div className="channel-button-row" key={channel.id}>
+            <div className="channel-button-row" data-channel-id={channel.id} key={channel.id}>
               <button
                 type="button"
                 className={`channel-button ${active ? 'channel-button-active' : ''}`}
@@ -2272,6 +2317,7 @@ function ChannelSection({
         return (
           <div
             className={`voice-channel-card ${active ? 'voice-channel-card-active' : ''}`}
+            data-channel-id={channel.id}
             key={channel.id}
           >
             <button
