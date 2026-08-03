@@ -1733,19 +1733,27 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                     </span>
                   ) : null}
                 </div>
-                <strong
-                  className={`profile-display-name profile-display-name-${profile.displayNameStyle}`}
-                  style={{ color: profile.displayNameColor }}
-                >
-                  {profile.displayName}
-                </strong>
+                <div className="profile-popover-name-row">
+                  <strong
+                    className={`profile-display-name profile-display-name-${profile.displayNameStyle}`}
+                    style={{ color: profile.displayNameColor }}
+                  >
+                    {profile.displayName}
+                  </strong>
+                  <button
+                    type="button"
+                    className="profile-name-copy"
+                    aria-label={`Copy display name ${profile.displayName}`}
+                    title="Copy display name"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(profile.displayName);
+                      setNotice({ tone: 'info', text: 'Display name copied.' });
+                    }}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
                 <span>{profile.bio}</span>
-                <span className="profile-friend-code">
-                  Friend code <b>{friendCode}</b>
-                </span>
-                <button type="button" onClick={() => setFriendDialogOpen(true)}>
-                  <UserPlus size={16} /> Add a friend
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1801,14 +1809,6 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                     </div>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNotice({ tone: 'info', text: 'Google authentication setup is next.' })
-                  }
-                >
-                  Connect Google account
-                </button>
               </div>
             ) : null}
           </footer>

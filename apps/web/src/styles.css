@@ -974,6 +974,37 @@ img {
   font-size: 0.68rem;
 }
 
+.profile-popover-name-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.profile-popover-name-row > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-popover .profile-name-copy {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  color: #bfc9e3;
+  background: transparent;
+}
+
+.profile-popover .profile-name-copy:hover {
+  color: #fff;
+  background: #303b58;
+}
+
 .profile-popover button {
   margin-top: 5px;
   padding: 8px;

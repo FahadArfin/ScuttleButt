@@ -253,3 +253,33 @@ final result: passed
 - [x] Typecheck, lint, unit tests, production build, and in-app browser QA completed.
 
 final result: passed
+
+## Profile popover cleanup and display-name copy QA
+
+### Comparison targets
+
+- Profile popover reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-869c7ab2-a08a-4e8a-b57a-2f3b95138584.png`
+- Display-name copy reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-ff2071a2-ec3f-4771-8e49-7714bca2c053.png`
+- Implementation URL: `http://localhost:5173/`
+- Browser state: local profile popover open with the display-name copy control exercised.
+
+### Comparison and interaction findings
+
+- The profile popover now contains only the profile preview, display name, copy affordance, Edit profile, and presence controls. Friend code, Add a friend, and Connect Google account were removed from this focused profile surface; the friend workflow remains available from Direct Messages where it belongs.
+- The copy icon sits beside the display name, uses an accessible label, and writes the display name to the clipboard. Browser QA confirmed the success notice `Display name copied.` after activation.
+- The resulting compact popover matches the supplied Discord reference's hierarchy and keeps the existing Scuttlebutt banner, avatar decoration, display-name styling, and presence menu behavior intact.
+
+### Findings
+
+No actionable P0, P1, or P2 findings remain for the updated profile popover.
+
+### Implementation checklist
+
+- [x] Remove friend code from the profile popover.
+- [x] Remove Add a friend from the profile popover.
+- [x] Remove Connect Google account from the profile popover.
+- [x] Add accessible copy display name control.
+- [x] Confirm copy success feedback in the browser.
+- [x] Confirm no visual overflow in the focused popover capture.
+
+final result: passed
