@@ -138,6 +138,7 @@ const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PROFILE_STORAGE_KEY = 'scuttlebutt:profile:v2';
 const HIDDEN_MUTED_GROUPS_STORAGE_KEY = 'scuttlebutt:hidden-muted-groups:v1';
 const SHOW_SERVER_PROFILE_BANNER = false;
+const SHOW_GROUP_WORKSPACE_HEADER = false;
 
 interface UserProfile {
   avatar: string;
@@ -1183,6 +1184,16 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   };
 
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
+  const hideGroupWorkspaceHeader =
+    activeSurface === 'groups' && Boolean(activeGroup) && !SHOW_GROUP_WORKSPACE_HEADER;
+  const groupSidebarLayoutClass =
+    activeSurface === 'groups' && activeGroup
+      ? hideGroupWorkspaceHeader
+        ? 'workspace-sidebar-group-compact'
+        : SHOW_SERVER_PROFILE_BANNER
+          ? 'workspace-sidebar-group'
+          : 'workspace-sidebar-group-header'
+      : '';
 
   return (
     <main className="app-shell" data-testid={E2E_SELECTORS.appShell}>
@@ -1204,7 +1215,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         />
 
         <aside
-          className={`workspace-sidebar ${activeSurface === 'groups' && activeGroup && SHOW_SERVER_PROFILE_BANNER ? 'workspace-sidebar-group' : ''}`}
+          className={`workspace-sidebar ${groupSidebarLayoutClass}`}
           aria-label="Workspace navigation"
         >
           {activeSurface === 'groups' && activeGroup && SHOW_SERVER_PROFILE_BANNER ? (
@@ -1219,128 +1230,136 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               </div>
             </div>
           ) : null}
-          <header className="workspace-titlebar workspace-titlebar-interactive">
-            <div>
-              <strong>{activeSurface === 'dms' ? 'Direct Messages' : activeGroup?.name}</strong>
-              <span>
-                {activeSurface === 'dms'
-                  ? 'Private conversations and group DMs.'
-                  : activeGroup?.description}
-              </span>
-            </div>
-            <button
-              type="button"
-              aria-label="Workspace menu"
-              aria-expanded={workspaceMenuOpen}
-              onClick={() => setWorkspaceMenuOpen((open) => !open)}
-            >
-              <CaretDown size={17} />
-            </button>
-            {workspaceMenuOpen ? (
-              <div className="workspace-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => setDialogMode('group')}>
-                  Create group
+          {!hideGroupWorkspaceHeader ? (
+            <>
+              <header className="workspace-titlebar workspace-titlebar-interactive">
+                <div>
+                  <strong>{activeSurface === 'dms' ? 'Direct Messages' : activeGroup?.name}</strong>
+                  <span>
+                    {activeSurface === 'dms'
+                      ? 'Private conversations and group DMs.'
+                      : activeGroup?.description}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Workspace menu"
+                  aria-expanded={workspaceMenuOpen}
+                  onClick={() => setWorkspaceMenuOpen((open) => !open)}
+                >
+                  <CaretDown size={17} />
                 </button>
-                {activeSurface === 'groups' ? (
-                  <>
-                    {canManageActiveGroup ? (
+                {workspaceMenuOpen ? (
+                  <div className="workspace-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => setDialogMode('group')}>
+                      Create group
+                    </button>
+                    {activeSurface === 'groups' ? (
+                      <>
+                        {canManageActiveGroup ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => openServerSettings('profile')}
+                          >
+                            Server Settings
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setGroupInviteOpen(true);
+                          }}
+                        >
+                          Invite to server
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => openChannelDialog('text')}
+                        >
+                          Create channel
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setCategoryDialogOpen(true);
+                          }}
+                        >
+                          Create category
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={hideMutedChannels}
+                          onClick={toggleHideMutedChannels}
+                        >
+                          {hideMutedChannels ? 'Show muted channels' : 'Hide muted channels'}
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setEventsOpen(true);
+                          }}
+                        >
+                          Events
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setAssetDialog('sound');
+                          }}
+                        >
+                          Add soundboard sound
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setWorkspaceMenuOpen(false);
+                            setAssetDialog('emote');
+                          }}
+                        >
+                          Add custom emote
+                        </button>
+                      </>
+                    ) : null}
+                    {activeSurface !== 'groups' ? (
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() => openServerSettings('profile')}
+                        onClick={() =>
+                          setNotice({
+                            tone: 'info',
+                            text: 'Workspace settings are available inside a server.',
+                          })
+                        }
                       >
-                        Server Settings
+                        Workspace settings
                       </button>
                     ) : null}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setWorkspaceMenuOpen(false);
-                        setGroupInviteOpen(true);
-                      }}
-                    >
-                      Invite to server
-                    </button>
-                    <button type="button" role="menuitem" onClick={() => openChannelDialog('text')}>
-                      Create channel
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setWorkspaceMenuOpen(false);
-                        setCategoryDialogOpen(true);
-                      }}
-                    >
-                      Create category
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitemcheckbox"
-                      aria-checked={hideMutedChannels}
-                      onClick={toggleHideMutedChannels}
-                    >
-                      {hideMutedChannels ? 'Show muted channels' : 'Hide muted channels'}
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setWorkspaceMenuOpen(false);
-                        setEventsOpen(true);
-                      }}
-                    >
-                      Events
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setWorkspaceMenuOpen(false);
-                        setAssetDialog('sound');
-                      }}
-                    >
-                      Add soundboard sound
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setWorkspaceMenuOpen(false);
-                        setAssetDialog('emote');
-                      }}
-                    >
-                      Add custom emote
-                    </button>
-                  </>
+                  </div>
                 ) : null}
-                {activeSurface !== 'groups' ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() =>
-                      setNotice({
-                        tone: 'info',
-                        text: 'Workspace settings are available inside a server.',
-                      })
-                    }
-                  >
-                    Workspace settings
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </header>
+              </header>
 
-          <div className="workspace-trust-row">
-            <span>
-              <span className="status-dot" /> Local server
-            </span>
-            <span>
-              <LockSimple size={14} weight="bold" /> Encrypted
-            </span>
-          </div>
+              <div className="workspace-trust-row">
+                <span>
+                  <span className="status-dot" /> Local server
+                </span>
+                <span>
+                  <LockSimple size={14} weight="bold" /> Encrypted
+                </span>
+              </div>
+            </>
+          ) : null}
 
           <div className="workspace-scroll">
             {activeSurface === 'dms' || activeSurface === 'threads' ? (

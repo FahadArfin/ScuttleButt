@@ -230,6 +230,18 @@ img {
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
 }
 
+.workspace-sidebar-group-header {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+
+.workspace-sidebar-group-compact {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+
+.workspace-sidebar-group-compact .community-heading {
+  display: none;
+}
+
 .workspace-titlebar {
   display: flex;
   min-width: 0;
