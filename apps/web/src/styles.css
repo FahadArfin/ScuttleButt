@@ -5573,6 +5573,25 @@ img {
   background-size: cover;
 }
 
+.server-profile-banner-draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.server-profile-banner-dragging {
+  cursor: grabbing;
+}
+
+.server-banner-position-hint {
+  margin: -1px 0 0;
+  padding: 8px 14px;
+  color: #9ca6b8;
+  background: #202631;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
 .server-profile-card-body {
   display: flex;
   align-items: center;

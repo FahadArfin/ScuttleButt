@@ -1184,6 +1184,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   };
 
   const activeChannelName = selectedChannel?.name ?? selectedConversation?.title ?? 'conversation';
+  const activeServerSettings = activeGroup ? serverSettingsFor(activeGroup) : undefined;
   const hideGroupWorkspaceHeader =
     activeSurface === 'groups' && Boolean(activeGroup) && !SHOW_GROUP_WORKSPACE_HEADER;
   const groupSidebarLayoutClass =
@@ -1222,9 +1223,12 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             <div
               className="group-server-banner group-server-banner-top"
               style={{
-                backgroundColor: serverSettingsFor(activeGroup).bannerColor,
-                backgroundImage: serverSettingsFor(activeGroup).bannerUrl
-                  ? `linear-gradient(90deg, rgb(0 0 0 / 68%), rgb(0 0 0 / 12%)), url(${serverSettingsFor(activeGroup).bannerUrl})`
+                backgroundColor: activeServerSettings?.bannerColor,
+                backgroundImage: activeServerSettings?.bannerUrl
+                  ? `linear-gradient(90deg, rgb(0 0 0 / 68%), rgb(0 0 0 / 12%)), url(${activeServerSettings.bannerUrl})`
+                  : undefined,
+                backgroundPosition: activeServerSettings
+                  ? `${activeServerSettings.bannerPosition.x}% ${activeServerSettings.bannerPosition.y}%`
                   : undefined,
               }}
             >

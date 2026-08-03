@@ -112,6 +112,10 @@ export interface ServerSettings {
     rules: string[];
     rulesEnabled: boolean;
   };
+  bannerPosition: {
+    x: number;
+    y: number;
+  };
   bannerUrl: string;
   bannerColor: string;
   communityEnabled: boolean;
@@ -186,6 +190,7 @@ export function createDefaultServerSettings(): ServerSettings {
       rules: [],
       rulesEnabled: false,
     },
+    bannerPosition: { x: 50, y: 50 },
     bannerUrl: '',
     bannerColor: '#283457',
     communityEnabled: false,
@@ -238,6 +243,7 @@ export function serverSettingsFor(group: WorkspaceGroup): ServerSettings {
     ...defaults,
     ...settings,
     access: { ...defaults.access, ...settings?.access },
+    bannerPosition: { ...defaults.bannerPosition, ...settings?.bannerPosition },
     engagement: { ...defaults.engagement, ...settings?.engagement },
     moderation: { ...defaults.moderation, ...settings?.moderation },
     serverTag: { ...defaults.serverTag, ...settings?.serverTag },

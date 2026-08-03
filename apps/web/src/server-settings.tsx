@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useMemo, useState, type ChangeEvent, type PointerEvent, type ReactNode } from 'react';
 import {
   Check,
   Copy,
@@ -142,6 +142,10 @@ function assetName(file: File): string {
     .slice(0, 24);
 }
 
+function clampBannerPosition(value: number): number {
+  return Math.min(100, Math.max(0, value));
+}
+
 function SectionHeader({
   description,
   eyebrow,
@@ -261,6 +265,12 @@ export function ServerSettingsDialog({
   const [newRule, setNewRule] = useState('');
   const [newWord, setNewWord] = useState('');
   const [inviteCopied, setInviteCopied] = useState('');
+  const [bannerDrag, setBannerDrag] = useState<{
+    pointerId: number;
+    startPosition: ServerSettings['bannerPosition'];
+    startX: number;
+    startY: number;
+  }>();
   const {
     settings,
     updateAccess,
@@ -323,13 +333,43 @@ export function ServerSettingsDialog({
     setUploadError('');
     try {
       const bannerUrl = await optimizeBanner(file);
-      updateSettings({ bannerUrl });
+      updateSettings({ bannerPosition: { x: 50, y: 50 }, bannerUrl });
     } catch (error) {
       setUploadError(
         error instanceof Error ? error.message : 'The server banner could not be processed.',
       );
     }
   };
+
+  const handleBannerPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!settings.bannerUrl) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setBannerDrag({
+      pointerId: event.pointerId,
+      startPosition: settings.bannerPosition,
+      startX: event.clientX,
+      startY: event.clientY,
+    });
+  };
+
+  const handleBannerPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!bannerDrag || bannerDrag.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    updateSettings({
+      bannerPosition: {
+        x: clampBannerPosition(
+          bannerDrag.startPosition.x -
+            ((event.clientX - bannerDrag.startX) / Math.max(1, bounds.width)) * 100,
+        ),
+        y: clampBannerPosition(
+          bannerDrag.startPosition.y -
+            ((event.clientY - bannerDrag.startY) / Math.max(1, bounds.height)) * 100,
+        ),
+      },
+    });
+  };
+
+  const stopBannerDrag = () => setBannerDrag(undefined);
 
   const handleEmojiUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -450,14 +490,28 @@ export function ServerSettingsDialog({
       />
       <SettingsCard className="server-profile-card">
         <div
-          className="server-profile-banner"
+          className={`server-profile-banner ${settings.bannerUrl ? 'server-profile-banner-draggable' : ''} ${bannerDrag ? 'server-profile-banner-dragging' : ''}`}
           style={{
             backgroundColor: settings.bannerColor,
             backgroundImage: settings.bannerUrl
               ? `linear-gradient(90deg, rgb(0 0 0 / 62%), rgb(0 0 0 / 10%)), url(${settings.bannerUrl})`
               : undefined,
+            backgroundPosition: `${settings.bannerPosition.x}% ${settings.bannerPosition.y}%`,
           }}
+          aria-label={settings.bannerUrl ? 'Drag to reposition server banner image' : undefined}
+          onLostPointerCapture={stopBannerDrag}
+          onPointerCancel={stopBannerDrag}
+          onPointerDown={handleBannerPointerDown}
+          onPointerMove={handleBannerPointerMove}
+          onPointerUp={stopBannerDrag}
         />
+        {settings.bannerUrl ? (
+          <p className="server-banner-position-hint">
+            {bannerDrag
+              ? 'Release to place the image.'
+              : 'Drag the image to choose what appears in the banner.'}
+          </p>
+        ) : null}
         <div className="server-profile-card-body">
           <PersonAvatar image={settings.iconUrl || undefined} name={draft.name} size="large" />
           <div>
@@ -522,13 +576,22 @@ export function ServerSettingsDialog({
           </label>
           <small>Wide images are resized automatically. Recommended: 3:1, up to 2 MB.</small>
           {settings.bannerUrl ? (
-            <button
-              type="button"
-              className="server-settings-button"
-              onClick={() => updateSettings({ bannerUrl: '' })}
-            >
-              Remove image
-            </button>
+            <>
+              <button
+                type="button"
+                className="server-settings-button"
+                onClick={() => updateSettings({ bannerPosition: { x: 50, y: 50 } })}
+              >
+                Center image
+              </button>
+              <button
+                type="button"
+                className="server-settings-button"
+                onClick={() => updateSettings({ bannerPosition: { x: 50, y: 50 }, bannerUrl: '' })}
+              >
+                Remove image
+              </button>
+            </>
           ) : null}
         </div>
       </SettingsCard>
