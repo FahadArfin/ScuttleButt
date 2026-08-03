@@ -73,6 +73,43 @@ The reference contains Discord-specific avatar art, OS tray chrome, and account 
 
 final result: passed
 
+## Profile customization editor QA
+
+### Comparison targets
+
+- Discord profile editor reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-b811c872-be6e-4308-a9b6-578cfa85f236.png`
+- Display name style reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-d0bb0cd9-4ce7-40df-ac69-b40885f7e5a7.png`
+- Profile effect, frame, and avatar decoration references: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-749d3a8e-af01-4ab6-befe-a534735844bc.png`, `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-fe919459-230f-4fb0-9e73-bf7eb3cc534f.png`, and `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-2ebc7ffc-b90a-4481-9e05-46b2d20f7699.png`
+- Implementation URL: `http://localhost:5173/`
+- Browser state: local user profile editor open at a 1280 x 720 CSS viewport (DPR 1), with nested picker and live preview exercised.
+
+### Comparison and interaction findings
+
+- The editor follows the supplied Discord hierarchy: a focused profile editor with account controls on the left, a live profile preview on the right, and nested picker dialogs for the more visual choices.
+- Banner color provides eight Scuttlebutt-safe presets plus a custom color input. The selected color updates the profile preview immediately and remains part of the existing profile persistence path.
+- Avatar decoration, profile effect, profile frame, and display-name style each open a dedicated picker with selected states, descriptions, preview updates, Cancel, and Apply actions. Display-name style also exposes a color palette.
+- Browser QA selected Cosmos, Orbit, Halo, and Neon, applied them, saved the editor, reloaded the app, reopened Edit profile, and confirmed all four choices were restored. The nested picker was also verified after correcting its modal stacking order so it receives pointer input above the parent editor.
+- The responsive rules collapse the editor and picker preview into a single column below the desktop layout threshold. The implementation uses Scuttlebutt's existing avatars, icons, colors, and typography rather than copying Discord-specific marketplace assets.
+
+### Findings
+
+No actionable P0, P1, or P2 findings remain for the implemented profile customization flow.
+
+The reference includes Discord/Nitro marketplace inventory and account-specific artwork. Scuttlebutt currently provides local, non-purchasable presets with clear labels, which keeps the interaction useful without implying unavailable marketplace functionality.
+
+### Implementation checklist
+
+- [x] Banner color presets and custom color control.
+- [x] Profile effect picker with live preview.
+- [x] Profile frame picker with live preview.
+- [x] Avatar decoration picker with live preview.
+- [x] Display-name style and color picker.
+- [x] Persisted per-account selections and reload verification.
+- [x] Desktop browser screenshot and responsive CSS review.
+- [x] Typecheck, lint, unit tests, and production build completed.
+
+final result: passed
+
 ## Application settings QA
 
 ### Comparison targets

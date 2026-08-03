@@ -28,11 +28,15 @@ import {
   Copy,
   EyeSlash,
   FileText,
+  Flower,
+  FrameCorners,
   GearSix,
   Hash,
   Headphones,
+  Crown,
   Leaf,
   LockSimple,
+  MagicWand,
   MagnifyingGlass,
   MapPin,
   Microphone,
@@ -42,14 +46,17 @@ import {
   MonitorArrowUp,
   Paperclip,
   PaperPlaneRight,
+  PaintBrush,
   Planet,
   PhoneDisconnect,
   Plus,
   PushPin,
   Repeat,
   Smiley,
+  Sparkle,
   SpeakerHigh,
   Star,
+  StarFour,
   UserPlus,
   Users,
   UploadSimple,
@@ -146,12 +153,40 @@ const HIDDEN_MUTED_GROUPS_STORAGE_KEY = 'scuttlebutt:hidden-muted-groups:v1';
 const SHOW_SERVER_PROFILE_BANNER = true;
 const SHOW_GROUP_WORKSPACE_HEADER = false;
 
+export const PROFILE_EFFECTS = ['none', 'sparkle', 'cosmos', 'neon', 'pop'] as const;
+export type ProfileEffect = (typeof PROFILE_EFFECTS)[number];
+
+export const PROFILE_FRAMES = ['none', 'orbit', 'lavender', 'gold', 'pixel'] as const;
+export type ProfileFrame = (typeof PROFILE_FRAMES)[number];
+
+export const AVATAR_DECORATIONS = ['none', 'halo', 'sparkle', 'crown', 'leaves'] as const;
+export type AvatarDecoration = (typeof AVATAR_DECORATIONS)[number];
+
+export const DISPLAY_NAME_STYLES = ['default', 'strong', 'neon', 'typewriter', 'pop'] as const;
+export type DisplayNameStyle = (typeof DISPLAY_NAME_STYLES)[number];
+
+const PROFILE_BANNER_COLORS = [
+  '#5865f2',
+  '#ef9b45',
+  '#c83b83',
+  '#2d9fd3',
+  '#43c8b7',
+  '#6b8f22',
+  '#9a4fc6',
+  '#303744',
+] as const;
+
 export interface UserProfile {
   avatar: string;
+  avatarDecoration: AvatarDecoration;
   bannerColor: string;
   bio: string;
+  displayNameColor: string;
+  displayNameStyle: DisplayNameStyle;
   displayName: string;
   presence: PresenceStatus;
+  profileEffect: ProfileEffect;
+  profileFrame: ProfileFrame;
   status: string;
 }
 
@@ -166,10 +201,15 @@ interface ChannelDraft {
 function loadProfile(user: SignedInUser): UserProfile {
   const fallback: UserProfile = {
     avatar: user.avatarUrl ?? '',
+    avatarDecoration: 'none',
     bannerColor: user.backgroundColor,
     bio: user.bio,
+    displayNameColor: '#eef1ff',
+    displayNameStyle: 'default',
     displayName: user.name,
     presence: user.presence,
+    profileEffect: 'none',
+    profileFrame: 'none',
     status: 'Online',
   };
   try {
@@ -179,11 +219,28 @@ function loadProfile(user: SignedInUser): UserProfile {
         (user.id === 'local-user' ? localStorage.getItem(PROFILE_STORAGE_KEY) : null) ??
         '{}',
     ) as Partial<UserProfile>;
-    return {
+    const normalized: UserProfile = {
       ...fallback,
       ...storedProfile,
+      avatarDecoration: AVATAR_DECORATIONS.includes(
+        storedProfile.avatarDecoration as AvatarDecoration,
+      )
+        ? (storedProfile.avatarDecoration as AvatarDecoration)
+        : fallback.avatarDecoration,
+      displayNameStyle: DISPLAY_NAME_STYLES.includes(
+        storedProfile.displayNameStyle as DisplayNameStyle,
+      )
+        ? (storedProfile.displayNameStyle as DisplayNameStyle)
+        : fallback.displayNameStyle,
+      profileEffect: PROFILE_EFFECTS.includes(storedProfile.profileEffect as ProfileEffect)
+        ? (storedProfile.profileEffect as ProfileEffect)
+        : fallback.profileEffect,
+      profileFrame: PROFILE_FRAMES.includes(storedProfile.profileFrame as ProfileFrame)
+        ? (storedProfile.profileFrame as ProfileFrame)
+        : fallback.profileFrame,
       presence: normalizePresenceStatus(storedProfile.presence ?? user.presence),
     };
+    return normalized;
   } catch {
     return fallback;
   }
@@ -266,6 +323,152 @@ function PresenceIcon({ status, size = 16 }: { status: PresenceStatus; size?: nu
   if (status === 'dnd') return <MinusCircle size={size} weight="fill" />;
   if (status === 'invisible') return <EyeSlash size={size} weight="bold" />;
   return <Circle size={size} weight="fill" />;
+}
+
+function ProfileEffectIcon({ effect, size = 20 }: { effect: ProfileEffect; size?: number }) {
+  if (effect === 'sparkle') return <Sparkle size={size} weight="fill" />;
+  if (effect === 'cosmos') return <Planet size={size} weight="duotone" />;
+  if (effect === 'neon') return <MagicWand size={size} weight="duotone" />;
+  if (effect === 'pop') return <Confetti size={size} weight="duotone" />;
+  return <Circle size={size} weight="bold" />;
+}
+
+function ProfileFrameIcon({ frame, size = 20 }: { frame: ProfileFrame; size?: number }) {
+  if (frame === 'orbit') return <Planet size={size} weight="duotone" />;
+  if (frame === 'lavender') return <Flower size={size} weight="duotone" />;
+  if (frame === 'gold') return <StarFour size={size} weight="fill" />;
+  if (frame === 'pixel') return <FrameCorners size={size} weight="bold" />;
+  return <Circle size={size} weight="bold" />;
+}
+
+function AvatarDecorationIcon({
+  decoration,
+  size = 18,
+}: {
+  decoration: AvatarDecoration;
+  size?: number;
+}) {
+  if (decoration === 'halo') return <Circle size={size} weight="bold" />;
+  if (decoration === 'sparkle') return <Sparkle size={size} weight="fill" />;
+  if (decoration === 'crown') return <Crown size={size} weight="fill" />;
+  if (decoration === 'leaves') return <Leaf size={size} weight="fill" />;
+  return <Circle size={size} weight="bold" />;
+}
+
+function DisplayNameStyleIcon({ style, size = 20 }: { style: DisplayNameStyle; size?: number }) {
+  if (style === 'strong') return <Star size={size} weight="fill" />;
+  if (style === 'neon') return <Sparkle size={size} weight="fill" />;
+  if (style === 'typewriter') return <PaintBrush size={size} weight="duotone" />;
+  if (style === 'pop') return <Confetti size={size} weight="duotone" />;
+  return <Circle size={size} weight="bold" />;
+}
+
+function profileEffectLabel(effect: ProfileEffect): string {
+  return {
+    none: 'None',
+    sparkle: 'Sparkle',
+    cosmos: 'Cosmos',
+    neon: 'Neon',
+    pop: 'Pop',
+  }[effect];
+}
+
+function profileFrameLabel(frame: ProfileFrame): string {
+  return {
+    none: 'None',
+    orbit: 'Orbit',
+    lavender: 'Lavender',
+    gold: 'Gold',
+    pixel: 'Pixel',
+  }[frame];
+}
+
+function avatarDecorationLabel(decoration: AvatarDecoration): string {
+  return {
+    none: 'None',
+    halo: 'Halo',
+    sparkle: 'Sparkle',
+    crown: 'Crown',
+    leaves: 'Leaves',
+  }[decoration];
+}
+
+function displayNameStyleLabel(style: DisplayNameStyle): string {
+  return {
+    default: 'Default',
+    strong: 'Strong',
+    neon: 'Neon',
+    typewriter: 'Typewriter',
+    pop: 'Pop',
+  }[style];
+}
+
+function DecoratedProfileAvatar({
+  className = '',
+  profile,
+  size = 'large',
+  status,
+}: {
+  className?: string;
+  profile: UserProfile;
+  size?: 'large' | 'medium' | 'small';
+  status?: ReturnType<typeof publicPresenceStatus>;
+}) {
+  return (
+    <span
+      className={`decorated-profile-avatar decorated-profile-avatar-${size} ${className}`.trim()}
+    >
+      <span className={`profile-avatar-frame profile-frame-${profile.profileFrame}`}>
+        <PersonAvatar
+          image={profile.avatar}
+          name={profile.displayName}
+          size={size}
+          status={status}
+        />
+      </span>
+      {profile.avatarDecoration !== 'none' ? (
+        <span
+          className={`profile-avatar-decoration profile-decoration-${profile.avatarDecoration}`}
+          aria-hidden="true"
+        >
+          <AvatarDecorationIcon decoration={profile.avatarDecoration} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function ProfilePreview({ profile, compact = false }: { profile: UserProfile; compact?: boolean }) {
+  return (
+    <div className={`profile-card-preview ${compact ? 'profile-card-preview-compact' : ''}`}>
+      <div
+        className={`profile-preview-banner profile-effect-${profile.profileEffect}`}
+        style={{ backgroundColor: profile.bannerColor }}
+      >
+        {profile.profileEffect !== 'none' ? (
+          <span
+            className="profile-effect-mark"
+            aria-label={`${profileEffectLabel(profile.profileEffect)} effect`}
+          >
+            <ProfileEffectIcon effect={profile.profileEffect} size={compact ? 22 : 30} />
+          </span>
+        ) : null}
+      </div>
+      <div className="profile-preview-body">
+        <DecoratedProfileAvatar profile={profile} className="profile-preview-avatar" />
+        <h3
+          className={`profile-display-name profile-display-name-${profile.displayNameStyle}`}
+          style={{ color: profile.displayNameColor }}
+        >
+          {profile.displayName || 'Your name'}
+        </h3>
+        <span>{profile.status || 'Online'}</span>
+        <hr />
+        <strong>About me</strong>
+        <p>{profile.bio || 'Tell friends a little about yourself.'}</p>
+      </div>
+    </div>
+  );
 }
 
 function canViewWorkspaceChannel(
@@ -1480,9 +1683,8 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               }}
               aria-expanded={profileOpen}
             >
-              <PersonAvatar
-                image={profile.avatar}
-                name={profile.displayName}
+              <DecoratedProfileAvatar
+                profile={profile}
                 status={publicPresenceStatus(profile.presence)}
               />
               <span>
@@ -1521,12 +1723,22 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             {profileOpen ? (
               <div className="profile-popover" role="dialog" aria-label="Profile menu">
                 <div
-                  className="profile-popover-preview"
+                  className={`profile-popover-preview profile-effect-${profile.profileEffect}`}
                   style={{ backgroundColor: profile.bannerColor }}
                 >
-                  <PersonAvatar image={profile.avatar} name={profile.displayName} size="large" />
+                  <DecoratedProfileAvatar profile={profile} />
+                  {profile.profileEffect !== 'none' ? (
+                    <span className="profile-effect-mark" aria-hidden="true">
+                      <ProfileEffectIcon effect={profile.profileEffect} size={20} />
+                    </span>
+                  ) : null}
                 </div>
-                <strong>{profile.displayName}</strong>
+                <strong
+                  className={`profile-display-name profile-display-name-${profile.displayNameStyle}`}
+                  style={{ color: profile.displayNameColor }}
+                >
+                  {profile.displayName}
+                </strong>
                 <span>{profile.bio}</span>
                 <span className="profile-friend-code">
                   Friend code <b>{friendCode}</b>
@@ -3803,6 +4015,19 @@ function LandingPanel({
   );
 }
 
+type ProfilePickerMode = 'decoration' | 'display-name' | 'effect' | 'frame';
+type ProfilePickerValue = AvatarDecoration | DisplayNameStyle | ProfileEffect | ProfileFrame;
+
+const PROFILE_NAME_COLORS = [
+  '#eef1ff',
+  '#f2bd55',
+  '#f86fbb',
+  '#5bd8c4',
+  '#65a7ff',
+  '#b77cff',
+  '#ff6c9d',
+] as const;
+
 function ProfileSettingsDialog({
   profile,
   onCancel,
@@ -3814,6 +4039,9 @@ function ProfileSettingsDialog({
 }) {
   const [draft, setDraft] = useState(profile);
   const [error, setError] = useState('');
+  const [pickerMode, setPickerMode] = useState<ProfilePickerMode>();
+  const [pickerValue, setPickerValue] = useState<ProfilePickerValue>('none');
+  const [pickerColor, setPickerColor] = useState(profile.displayNameColor);
   const update = <Key extends keyof UserProfile>(key: Key, value: UserProfile[Key]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const handleAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -3831,117 +4059,446 @@ function ProfileSettingsDialog({
       setError(reason instanceof Error ? reason.message : 'The image could not be prepared.');
     }
   };
+  const openPicker = (mode: ProfilePickerMode) => {
+    setPickerMode(mode);
+    setPickerColor(draft.displayNameColor);
+    if (mode === 'decoration') setPickerValue(draft.avatarDecoration);
+    if (mode === 'display-name') setPickerValue(draft.displayNameStyle);
+    if (mode === 'effect') setPickerValue(draft.profileEffect);
+    if (mode === 'frame') setPickerValue(draft.profileFrame);
+  };
+  const applyPicker = () => {
+    if (
+      pickerMode === 'decoration' &&
+      AVATAR_DECORATIONS.includes(pickerValue as AvatarDecoration)
+    ) {
+      update('avatarDecoration', pickerValue as AvatarDecoration);
+    }
+    if (
+      pickerMode === 'display-name' &&
+      DISPLAY_NAME_STYLES.includes(pickerValue as DisplayNameStyle)
+    ) {
+      update('displayNameStyle', pickerValue as DisplayNameStyle);
+      update('displayNameColor', pickerColor);
+    }
+    if (pickerMode === 'effect' && PROFILE_EFFECTS.includes(pickerValue as ProfileEffect)) {
+      update('profileEffect', pickerValue as ProfileEffect);
+    }
+    if (pickerMode === 'frame' && PROFILE_FRAMES.includes(pickerValue as ProfileFrame)) {
+      update('profileFrame', pickerValue as ProfileFrame);
+    }
+    setPickerMode(undefined);
+  };
+  return (
+    <>
+      <div
+        className="modal-backdrop profile-settings-backdrop"
+        role="presentation"
+        onMouseDown={onCancel}
+      >
+        <form
+          className="profile-settings-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-settings-title"
+          onMouseDown={(event) => event.stopPropagation()}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave(draft);
+          }}
+        >
+          <header>
+            <div>
+              <p className="section-kicker">My account</p>
+              <h2 id="profile-settings-title">Edit profile</h2>
+              <p className="profile-settings-subtitle">
+                Make your profile feel like yours. Changes are saved to this account on this device.
+              </p>
+            </div>
+            <button type="button" aria-label="Close profile settings" onClick={onCancel}>
+              <X size={20} />
+            </button>
+          </header>
+          <div className="profile-editor-layout">
+            <div className="profile-edit-fields">
+              <section className="avatar-upload-section">
+                <div className="profile-section-heading">
+                  <div>
+                    <span className="profile-field-label">Avatar & decoration</span>
+                    <small>Show a profile picture with a frame and a small finishing touch.</small>
+                  </div>
+                  <DecoratedProfileAvatar profile={draft} size="large" />
+                </div>
+                <div className="profile-avatar-actions">
+                  <label className="profile-upload-button">
+                    <UploadSimple size={17} /> Upload image
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      onChange={handleAvatar}
+                    />
+                  </label>
+                  <button type="button" onClick={() => update('avatar', '')}>
+                    Reset
+                  </button>
+                  <button type="button" onClick={() => openPicker('decoration')}>
+                    <Sparkle size={16} /> {avatarDecorationLabel(draft.avatarDecoration)} decoration
+                  </button>
+                </div>
+                <small>
+                  PNG, JPEG, GIF, or WebP. Large images are resized automatically to 2 MB.
+                </small>
+                {error ? <p role="alert">{error}</p> : null}
+              </section>
+
+              <section className="profile-customization-section">
+                <div className="profile-section-heading">
+                  <div>
+                    <span className="profile-field-label">Banner color</span>
+                    <small>Pick a color that appears behind your profile picture.</small>
+                  </div>
+                  <span className="profile-color-value">{draft.bannerColor.toUpperCase()}</span>
+                </div>
+                <div className="profile-banner-palette" role="group" aria-label="Banner colors">
+                  {PROFILE_BANNER_COLORS.map((color) => (
+                    <button
+                      type="button"
+                      key={color}
+                      className={`profile-color-swatch ${draft.bannerColor === color ? 'selected' : ''}`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Use ${color} banner color`}
+                      aria-pressed={draft.bannerColor === color}
+                      onClick={() => update('bannerColor', color)}
+                    />
+                  ))}
+                  <label className="profile-custom-color" title="Choose a custom banner color">
+                    <PaintBrush size={17} />
+                    <input
+                      type="color"
+                      value={draft.bannerColor}
+                      aria-label="Custom banner color"
+                      onChange={(event) => update('bannerColor', event.target.value)}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="profile-customization-section">
+                <div className="profile-section-heading">
+                  <div>
+                    <span className="profile-field-label">Profile look</span>
+                    <small>Choose how your profile appears in popovers and conversations.</small>
+                  </div>
+                  <PaintBrush size={19} aria-hidden="true" />
+                </div>
+                <div className="profile-customization-grid">
+                  <button
+                    type="button"
+                    className="profile-customization-card"
+                    onClick={() => openPicker('effect')}
+                  >
+                    <span
+                      className={`profile-customization-icon profile-effect-${draft.profileEffect}`}
+                    >
+                      <ProfileEffectIcon effect={draft.profileEffect} />
+                    </span>
+                    <span>
+                      <strong>Profile effect</strong>
+                      <small>{profileEffectLabel(draft.profileEffect)}</small>
+                    </span>
+                    <CaretRight size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="profile-customization-card"
+                    onClick={() => openPicker('frame')}
+                  >
+                    <span
+                      className={`profile-customization-icon profile-frame-${draft.profileFrame}`}
+                    >
+                      <ProfileFrameIcon frame={draft.profileFrame} />
+                    </span>
+                    <span>
+                      <strong>Profile frame</strong>
+                      <small>{profileFrameLabel(draft.profileFrame)}</small>
+                    </span>
+                    <CaretRight size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="profile-customization-card"
+                    onClick={() => openPicker('display-name')}
+                  >
+                    <span
+                      className={`profile-customization-icon profile-display-name-${draft.displayNameStyle}`}
+                    >
+                      <DisplayNameStyleIcon style={draft.displayNameStyle} />
+                    </span>
+                    <span>
+                      <strong>Display name style</strong>
+                      <small>{displayNameStyleLabel(draft.displayNameStyle)}</small>
+                    </span>
+                    <CaretRight size={16} />
+                  </button>
+                </div>
+              </section>
+
+              <label>
+                <span className="profile-field-label">Display name</span>
+                <input
+                  value={draft.displayName}
+                  maxLength={32}
+                  onChange={(event) => update('displayName', event.target.value)}
+                />
+              </label>
+              <label>
+                <span className="profile-field-label">About me</span>
+                <textarea
+                  value={draft.bio}
+                  maxLength={190}
+                  rows={4}
+                  onChange={(event) => update('bio', event.target.value)}
+                />
+                <small>{draft.bio.length}/190</small>
+              </label>
+              <label>
+                <span className="profile-field-label">Status text</span>
+                <input
+                  value={draft.status}
+                  maxLength={40}
+                  onChange={(event) => update('status', event.target.value)}
+                />
+              </label>
+            </div>
+            <aside aria-label="Profile preview">
+              <p className="profile-preview-label">Live preview</p>
+              <ProfilePreview profile={draft} />
+              <div className="profile-preview-note">
+                Your banner, effect, frame, decoration, and name style update here as you choose
+                them.
+              </div>
+            </aside>
+          </div>
+          <footer>
+            <button type="button" onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit" disabled={!draft.displayName.trim()}>
+              Save changes
+            </button>
+          </footer>
+        </form>
+      </div>
+      {pickerMode ? (
+        <ProfilePickerDialog
+          color={pickerColor}
+          draft={draft}
+          mode={pickerMode}
+          value={pickerValue}
+          onApply={applyPicker}
+          onCancel={() => setPickerMode(undefined)}
+          onChange={setPickerValue}
+          onColorChange={setPickerColor}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ProfilePickerDialog({
+  color,
+  draft,
+  mode,
+  value,
+  onApply,
+  onCancel,
+  onChange,
+  onColorChange,
+}: {
+  color: string;
+  draft: UserProfile;
+  mode: ProfilePickerMode;
+  value: ProfilePickerValue;
+  onApply: () => void;
+  onCancel: () => void;
+  onChange: (value: ProfilePickerValue) => void;
+  onColorChange: (color: string) => void;
+}) {
+  const previewProfile: UserProfile = {
+    ...draft,
+    avatarDecoration: mode === 'decoration' ? (value as AvatarDecoration) : draft.avatarDecoration,
+    displayNameColor: mode === 'display-name' ? color : draft.displayNameColor,
+    displayNameStyle:
+      mode === 'display-name' ? (value as DisplayNameStyle) : draft.displayNameStyle,
+    profileEffect: mode === 'effect' ? (value as ProfileEffect) : draft.profileEffect,
+    profileFrame: mode === 'frame' ? (value as ProfileFrame) : draft.profileFrame,
+  };
+  const title =
+    mode === 'display-name'
+      ? 'Change display name style'
+      : mode === 'effect'
+        ? 'Change profile effect'
+        : mode === 'frame'
+          ? 'Change profile frame'
+          : 'Change avatar decoration';
+  const description =
+    mode === 'display-name'
+      ? 'Choose a style and color for your name.'
+      : mode === 'effect'
+        ? 'Add a little movement and personality to your profile banner.'
+        : mode === 'frame'
+          ? 'Choose a frame that wraps around your avatar.'
+          : 'Add a small accent around your avatar.';
   return (
     <div
-      className="modal-backdrop profile-settings-backdrop"
+      className="modal-backdrop profile-picker-backdrop"
       role="presentation"
       onMouseDown={onCancel}
     >
-      <form
-        className="profile-settings-dialog"
+      <div
+        className="profile-picker-dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="profile-settings-title"
+        aria-labelledby="profile-picker-title"
         onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave(draft);
-        }}
       >
         <header>
           <div>
-            <p className="section-kicker">My account</p>
-            <h2 id="profile-settings-title">Customize profile</h2>
+            <p className="section-kicker">Profile customization</p>
+            <h2 id="profile-picker-title">{title}</h2>
+            <p>{description}</p>
           </div>
-          <button type="button" aria-label="Close profile settings" onClick={onCancel}>
+          <button type="button" aria-label={`Close ${title}`} onClick={onCancel}>
             <X size={20} />
           </button>
         </header>
-        <div className="profile-editor-layout">
-          <div className="profile-edit-fields">
-            <section className="avatar-upload-section">
-              <span className="profile-field-label">Profile picture</span>
-              <div>
-                <PersonAvatar image={draft.avatar} name={draft.displayName} size="large" />
-                <label className="profile-upload-button">
-                  <UploadSimple size={17} /> Upload image
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp"
-                    onChange={handleAvatar}
-                  />
-                </label>
-                <button type="button" onClick={() => update('avatar', '')}>
-                  Reset
-                </button>
-              </div>
-              <small>
-                PNG, JPEG, GIF, or WebP. Large images are resized automatically to 2 MB.
-              </small>
-              {error ? <p role="alert">{error}</p> : null}
-            </section>
-            <label>
-              <span className="profile-field-label">Display name</span>
-              <input
-                value={draft.displayName}
-                maxLength={32}
-                onChange={(event) => update('displayName', event.target.value)}
+        <div className="profile-picker-layout">
+          <div className="profile-picker-options">
+            {mode === 'display-name' ? (
+              <>
+                <span className="profile-picker-label">Choose style</span>
+                <div className="profile-picker-grid profile-name-style-grid">
+                  {DISPLAY_NAME_STYLES.map((style) => (
+                    <button
+                      type="button"
+                      key={style}
+                      className={`profile-picker-option profile-name-style-option profile-display-name-${style} ${value === style ? 'selected' : ''}`}
+                      aria-pressed={value === style}
+                      onClick={() => onChange(style)}
+                    >
+                      <DisplayNameStyleIcon style={style} />
+                      <strong>{displayNameStyleLabel(style)}</strong>
+                    </button>
+                  ))}
+                </div>
+                <span className="profile-picker-label">Choose color</span>
+                <div className="profile-name-color-grid">
+                  {PROFILE_NAME_COLORS.map((nameColor) => (
+                    <button
+                      type="button"
+                      key={nameColor}
+                      className={`profile-name-color ${color === nameColor ? 'selected' : ''}`}
+                      style={{ backgroundColor: nameColor }}
+                      aria-label={`Use ${nameColor} display name color`}
+                      aria-pressed={color === nameColor}
+                      onClick={() => onColorChange(nameColor)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {mode === 'effect' ? (
+              <ProfilePickerOptions
+                value={value}
+                options={[
+                  { id: 'none' as const, label: 'None', detail: 'Keep it clean.' },
+                  { id: 'sparkle' as const, label: 'Sparkle', detail: 'A bright little accent.' },
+                  { id: 'cosmos' as const, label: 'Cosmos', detail: 'A space-inspired banner.' },
+                  { id: 'neon' as const, label: 'Neon', detail: 'Electric edges and energy.' },
+                  { id: 'pop' as const, label: 'Pop', detail: 'A playful celebration.' },
+                ]}
+                icon={(id) => <ProfileEffectIcon effect={id} size={25} />}
+                onChange={onChange}
               />
-            </label>
-            <label>
-              <span className="profile-field-label">About me</span>
-              <textarea
-                value={draft.bio}
-                maxLength={190}
-                rows={4}
-                onChange={(event) => update('bio', event.target.value)}
+            ) : null}
+            {mode === 'frame' ? (
+              <ProfilePickerOptions
+                value={value}
+                options={[
+                  { id: 'none' as const, label: 'None', detail: 'Keep your avatar classic.' },
+                  { id: 'orbit' as const, label: 'Orbit', detail: 'A rounded planet frame.' },
+                  { id: 'lavender' as const, label: 'Lavender', detail: 'A soft violet frame.' },
+                  { id: 'gold' as const, label: 'Gold', detail: 'A warm star frame.' },
+                  { id: 'pixel' as const, label: 'Pixel', detail: 'A crisp corner frame.' },
+                ]}
+                icon={(id) => <ProfileFrameIcon frame={id} size={25} />}
+                onChange={onChange}
               />
-              <small>{draft.bio.length}/190</small>
-            </label>
-            <label>
-              <span className="profile-field-label">Status text</span>
-              <input
-                value={draft.status}
-                maxLength={40}
-                onChange={(event) => update('status', event.target.value)}
+            ) : null}
+            {mode === 'decoration' ? (
+              <ProfilePickerOptions
+                value={value}
+                options={[
+                  { id: 'none' as const, label: 'None', detail: 'No avatar decoration.' },
+                  { id: 'halo' as const, label: 'Halo', detail: 'A simple ring of light.' },
+                  { id: 'sparkle' as const, label: 'Sparkle', detail: 'A small bright accent.' },
+                  { id: 'crown' as const, label: 'Crown', detail: 'A little royal detail.' },
+                  { id: 'leaves' as const, label: 'Leaves', detail: 'A natural touch.' },
+                ]}
+                icon={(id) => <AvatarDecorationIcon decoration={id} size={25} />}
+                onChange={onChange}
               />
-            </label>
-            <label>
-              <span className="profile-field-label">Profile color</span>
-              <div className="profile-color-control">
-                <input
-                  type="color"
-                  value={draft.bannerColor}
-                  onChange={(event) => update('bannerColor', event.target.value)}
-                />
-                <span>{draft.bannerColor.toUpperCase()}</span>
-              </div>
-            </label>
+            ) : null}
           </div>
-          <aside className="profile-card-preview" aria-label="Profile preview">
-            <div
-              className="profile-preview-banner"
-              style={{ backgroundColor: draft.bannerColor }}
-            />
-            <div className="profile-preview-body">
-              <PersonAvatar image={draft.avatar} name={draft.displayName} size="large" />
-              <h3>{draft.displayName || 'Your name'}</h3>
-              <span>{draft.status || 'Online'}</span>
-              <hr />
-              <strong>About me</strong>
-              <p>{draft.bio || 'Tell friends a little about yourself.'}</p>
-            </div>
-          </aside>
+          <div className="profile-picker-preview">
+            <span className="profile-picker-label">Preview</span>
+            <ProfilePreview profile={previewProfile} compact />
+          </div>
         </div>
         <footer>
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" disabled={!draft.displayName.trim()}>
-            Save changes
+          <button type="button" onClick={onApply}>
+            Apply
           </button>
         </footer>
-      </form>
+      </div>
+    </div>
+  );
+}
+
+function ProfilePickerOptions<
+  Option extends { id: ProfilePickerValue; label: string; detail: string },
+>({
+  icon,
+  onChange,
+  options,
+  value,
+}: {
+  icon: (id: Option['id']) => ReactNode;
+  onChange: (value: ProfilePickerValue) => void;
+  options: Option[];
+  value: ProfilePickerValue;
+}) {
+  return (
+    <div className="profile-picker-grid">
+      {options.map((option) => (
+        <button
+          type="button"
+          className={`profile-picker-option ${value === option.id ? 'selected' : ''}`}
+          key={option.id}
+          aria-pressed={value === option.id}
+          onClick={() => onChange(option.id)}
+        >
+          <span className="profile-picker-option-icon">{icon(option.id)}</span>
+          <span>
+            <strong>{option.label}</strong>
+            <small>{option.detail}</small>
+          </span>
+          {value === option.id ? <Check size={17} weight="bold" /> : null}
+        </button>
+      ))}
     </div>
   );
 }
