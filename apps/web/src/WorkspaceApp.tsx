@@ -12,9 +12,12 @@ import {
 import {
   ArrowLeft,
   Bell,
+  BellSlash,
   Camera,
+  CalendarBlank,
   CaretDown,
   CaretRight,
+  ChatCircleText,
   ChatCenteredDots,
   Check,
   Circle,
@@ -30,6 +33,7 @@ import {
   Leaf,
   LockSimple,
   MagnifyingGlass,
+  MapPin,
   Microphone,
   MinusCircle,
   Moon,
@@ -41,6 +45,7 @@ import {
   PhoneDisconnect,
   Plus,
   PushPin,
+  Repeat,
   Smiley,
   SpeakerHigh,
   Star,
@@ -94,7 +99,12 @@ import {
   type CustomEmote,
   type CustomSound,
   type DialogMode,
+  type ForumPost,
+  type ServerEvent,
+  type ServerEventFrequency,
   type WorkspaceChannel,
+  type WorkspaceChannelKind,
+  type WorkspaceCategory,
   type WorkspaceGroup,
   type WorkspaceMember,
 } from './workspace.js';
@@ -124,6 +134,7 @@ const DRAFT_STORAGE_PREFIX = 'scuttlebutt:draft:';
 const FRIEND_CODE_STORAGE_KEY = 'scuttlebutt:friend-code';
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PROFILE_STORAGE_KEY = 'scuttlebutt:profile:v2';
+const HIDDEN_MUTED_GROUPS_STORAGE_KEY = 'scuttlebutt:hidden-muted-groups:v1';
 
 interface UserProfile {
   avatar: string;
@@ -132,6 +143,14 @@ interface UserProfile {
   displayName: string;
   presence: PresenceStatus;
   status: string;
+}
+
+interface ChannelDraft {
+  allowedRoleIds: string[];
+  categoryId?: string;
+  isPrivate: boolean;
+  kind: WorkspaceChannelKind;
+  name: string;
 }
 
 function loadProfile(user: SignedInUser): UserProfile {
@@ -239,6 +258,31 @@ function PresenceIcon({ status, size = 16 }: { status: PresenceStatus; size?: nu
   return <Circle size={size} weight="fill" />;
 }
 
+function canViewWorkspaceChannel(
+  group: WorkspaceGroup,
+  channel: WorkspaceChannel,
+  userId: string,
+): boolean {
+  if (!channel.isPrivate || group.ownerId === userId) return true;
+  const member = group.members?.find(({ id }) => id === userId);
+  const memberRoleIds = member?.roleIds ?? [];
+  const allowedRoleIds = channel.allowedRoleIds ?? [];
+  return (
+    allowedRoleIds.includes('everyone') || memberRoleIds.some((id) => allowedRoleIds.includes(id))
+  );
+}
+
+function formatEventFrequency(frequency: ServerEventFrequency): string {
+  if (frequency === 'daily') return 'Daily';
+  if (frequency === 'weekly') return 'Weekly';
+  if (frequency === 'monthly') return 'Monthly';
+  return 'Does not repeat';
+}
+
+function formatEventLocation(event: ServerEvent): string {
+  return event.locationType === 'voice' ? `Voice channel · ${event.location}` : event.location;
+}
+
 export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
   const googleCredential = sessionStorage.getItem('scuttlebutt:google-credential');
   const [repository] = useState<MessagingRepository>(
@@ -267,7 +311,20 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [profileOpen, setProfileOpen] = useState(false);
   const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>();
+  const [channelDialogOpen, setChannelDialogOpen] = useState(false);
+  const [channelDialogKind, setChannelDialogKind] = useState<WorkspaceChannelKind>('text');
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [hiddenMutedGroups, setHiddenMutedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(
+        window.localStorage.getItem(HIDDEN_MUTED_GROUPS_STORAGE_KEY) ?? '{}',
+      ) as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -296,6 +353,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   );
   const friendCode = friendState.friendCode;
   const activeGroup = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
+  const hideMutedChannels = Boolean(activeGroup && hiddenMutedGroups[activeGroup.id]);
   const canManageActiveGroup = Boolean(
     activeGroup && (!activeGroup.ownerId || activeGroup.ownerId === user.id),
   );
@@ -457,6 +515,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   useEffect(() => {
     window.localStorage.setItem(`${PROFILE_STORAGE_KEY}:${user.id}`, JSON.stringify(profile));
   }, [profile, user.id]);
+
+  useEffect(() => {
+    window.localStorage.setItem(HIDDEN_MUTED_GROUPS_STORAGE_KEY, JSON.stringify(hiddenMutedGroups));
+  }, [hiddenMutedGroups]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -682,6 +744,170 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
 
     setDialogMode(undefined);
     setNotice({ tone: 'info', text: `${name} created locally.` });
+  };
+
+  const openChannelDialog = (kind: WorkspaceChannelKind = 'text') => {
+    setWorkspaceMenuOpen(false);
+    setChannelDialogKind(kind);
+    setChannelDialogOpen(true);
+  };
+
+  const createChannel = async (draft: ChannelDraft) => {
+    if (!activeGroup) return;
+    const name = draft.name.trim();
+    const slug = slugify(name);
+    if (!name || !slug) return;
+    const timestamp = Date.now();
+    const channel: WorkspaceChannel = {
+      id: `${slug}-${timestamp}`,
+      name: draft.kind === 'text' ? slug : name,
+      kind: draft.kind,
+      conversationId: `${activeGroup.id}-${draft.kind}-${slug}-${timestamp}`,
+      participantIds: [],
+      categoryId: draft.categoryId,
+      isPrivate: draft.isPrivate,
+      allowedRoleIds: draft.isPrivate ? draft.allowedRoleIds : undefined,
+      forumPosts: draft.kind === 'forum' ? [] : undefined,
+    };
+    await repository.createConversation(conversationForChannel(activeGroup, channel));
+    setGroups((current) =>
+      current.map((group) =>
+        group.id === activeGroup.id ? { ...group, channels: [...group.channels, channel] } : group,
+      ),
+    );
+    await refreshConversations();
+    setChannelDialogOpen(false);
+    setActiveSurface('groups');
+    setSelectedConversationId(channel.conversationId);
+    setNotice({
+      tone: 'info',
+      text: `${name} ${draft.kind === 'forum' ? 'forum' : draft.kind} channel created.`,
+    });
+  };
+
+  const createCategory = (rawName: string) => {
+    if (!activeGroup) return;
+    const name = rawName.trim();
+    const slug = slugify(name);
+    if (!name || !slug) return;
+    const category: WorkspaceCategory = { id: `${slug}-${Date.now()}`, name };
+    setGroups((current) =>
+      current.map((group) =>
+        group.id === activeGroup.id
+          ? { ...group, categories: [...(group.categories ?? []), category] }
+          : group,
+      ),
+    );
+    setCategoryDialogOpen(false);
+    setNotice({ tone: 'info', text: `${name} category created.` });
+  };
+
+  const toggleHideMutedChannels = () => {
+    if (!activeGroup) return;
+    setHiddenMutedGroups((current) => ({
+      ...current,
+      [activeGroup.id]: !current[activeGroup.id],
+    }));
+  };
+
+  const toggleChannelMuted = (channelId: string) => {
+    if (!activeGroup) return;
+    setGroups((current) =>
+      current.map((group) =>
+        group.id !== activeGroup.id
+          ? group
+          : {
+              ...group,
+              channels: group.channels.map((channel) =>
+                channel.id === channelId ? { ...channel, muted: !channel.muted } : channel,
+              ),
+            },
+      ),
+    );
+  };
+
+  const createForumPost = (channelId: string, title: string, body: string) => {
+    if (!activeGroup) return;
+    const post: ForumPost = {
+      id: `post-${Date.now()}`,
+      title: title.trim(),
+      body: body.trim(),
+      authorAvatar: profile.avatar,
+      authorId: user.id,
+      authorName: profile.displayName,
+      createdAt: new Date().toISOString(),
+      replies: [],
+    };
+    setGroups((current) =>
+      current.map((group) =>
+        group.id !== activeGroup.id
+          ? group
+          : {
+              ...group,
+              channels: group.channels.map((channel) =>
+                channel.id === channelId
+                  ? { ...channel, forumPosts: [...(channel.forumPosts ?? []), post] }
+                  : channel,
+              ),
+            },
+      ),
+    );
+    setNotice({ tone: 'info', text: 'Forum post created.' });
+  };
+
+  const addForumReply = (channelId: string, postId: string, body: string) => {
+    if (!activeGroup || !body.trim()) return;
+    const reply = {
+      id: `reply-${Date.now()}`,
+      body: body.trim(),
+      authorAvatar: profile.avatar,
+      authorId: user.id,
+      authorName: profile.displayName,
+      createdAt: new Date().toISOString(),
+    };
+    setGroups((current) =>
+      current.map((group) =>
+        group.id !== activeGroup.id
+          ? group
+          : {
+              ...group,
+              channels: group.channels.map((channel) =>
+                channel.id !== channelId
+                  ? channel
+                  : {
+                      ...channel,
+                      forumPosts: (channel.forumPosts ?? []).map((post) =>
+                        post.id === postId ? { ...post, replies: [...post.replies, reply] } : post,
+                      ),
+                    },
+              ),
+            },
+      ),
+    );
+  };
+
+  const createServerEvent = async (event: ServerEvent) => {
+    if (!activeGroup) return;
+    setGroups((current) =>
+      current.map((group) =>
+        group.id === activeGroup.id
+          ? { ...group, events: [...(group.events ?? []), event] }
+          : group,
+      ),
+    );
+    if (event.postChannelId) {
+      const postChannel = activeGroup.channels.find(({ id }) => id === event.postChannelId);
+      if (postChannel) {
+        await repository.createConversation(conversationForChannel(activeGroup, postChannel));
+        await repository.sendMessage(
+          postChannel.conversationId,
+          `📅 ${event.title}\n${new Date(`${event.startDate}T${event.startTime}`).toLocaleString()} · ${formatEventLocation(event)}\n${event.description || 'Join us for this event.'}${event.frequency !== 'once' ? `\nRepeats: ${formatEventFrequency(event.frequency)}` : ''}`,
+        );
+        if (postChannel.conversationId === selectedConversationId) await refreshMessages();
+      }
+    }
+    setEventsOpen(false);
+    setNotice({ tone: 'info', text: `${event.title} was added to ${activeGroup.name}.` });
   };
 
   const updateVoiceConnection = (connected: boolean) => {
@@ -986,14 +1212,38 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                         setGroupInviteOpen(true);
                       }}
                     >
-                      Invite friends
+                      Invite to server
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => openChannelDialog('text')}>
+                      Create channel
                     </button>
                     <button
                       type="button"
                       role="menuitem"
-                      onClick={() => setDialogMode('text-channel')}
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setCategoryDialogOpen(true);
+                      }}
                     >
-                      Create channel
+                      Create category
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitemcheckbox"
+                      aria-checked={hideMutedChannels}
+                      onClick={toggleHideMutedChannels}
+                    >
+                      {hideMutedChannels ? 'Show muted channels' : 'Hide muted channels'}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setEventsOpen(true);
+                      }}
+                    >
+                      Events
                     </button>
                     <button
                       type="button"
@@ -1074,9 +1324,17 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 members={members}
                 selectedConversationId={selectedConversationId}
                 canManage={canManageActiveGroup}
+                hideMutedChannels={hideMutedChannels}
+                onCreateChannel={() => openChannelDialog('text')}
+                onCreateCategory={() => setCategoryDialogOpen(true)}
+                onCreateForum={() => openChannelDialog('forum')}
+                onEvents={() => setEventsOpen(true)}
+                onInvite={() => setGroupInviteOpen(true)}
+                onToggleHideMuted={toggleHideMutedChannels}
+                onToggleMute={toggleChannelMuted}
                 onSettings={() => openServerSettings('profile')}
-                onCreateText={() => setDialogMode('text-channel')}
-                onCreateVoice={() => setDialogMode('voice-channel')}
+                onCreateText={() => openChannelDialog('text')}
+                onCreateVoice={() => openChannelDialog('voice')}
                 onJoinVoice={joinVoiceChannel}
                 onSelectText={(id) => selectConversation(id, 'groups')}
               />
@@ -1295,6 +1553,17 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                         />
                       </div>
                     </div>
+                  ) : selectedConversation.channelKind === 'forum' && selectedChannel ? (
+                    <ForumChannelView
+                      channel={selectedChannel}
+                      currentUserId={user.id}
+                      localAvatar={profile.avatar}
+                      localUserName={profile.displayName}
+                      onCreatePost={(title, body) =>
+                        createForumPost(selectedChannel.id, title, body)
+                      }
+                      onReply={(postId, body) => addForumReply(selectedChannel.id, postId, body)}
+                    />
                   ) : (
                     <MessageList
                       composer={composer}
@@ -1335,7 +1604,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                   </p>
                 ) : null}
 
-                {!isVoiceConversation ? (
+                {!isVoiceConversation && selectedConversation.channelKind !== 'forum' ? (
                   <Composer
                     activeChannelName={activeChannelName}
                     attachments={attachments}
@@ -1449,6 +1718,29 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
           groupName={activeGroup?.name}
           onCancel={() => setDialogMode(undefined)}
           onCreate={(name) => void createFromDialog(name)}
+        />
+      ) : null}
+      {channelDialogOpen && activeGroup ? (
+        <ChannelCreationDialog
+          group={activeGroup}
+          initialKind={channelDialogKind}
+          onCancel={() => setChannelDialogOpen(false)}
+          onCreate={(draft) => void createChannel(draft)}
+        />
+      ) : null}
+      {categoryDialogOpen && activeGroup ? (
+        <CategoryCreationDialog
+          groupName={activeGroup.name}
+          onCancel={() => setCategoryDialogOpen(false)}
+          onCreate={createCategory}
+        />
+      ) : null}
+      {eventsOpen && activeGroup ? (
+        <EventsPanel
+          group={activeGroup}
+          currentUserId={user.id}
+          onCancel={() => setEventsOpen(false)}
+          onCreate={(event) => void createServerEvent(event)}
         />
       ) : null}
       {friendDialogOpen ? (
@@ -1697,9 +1989,17 @@ function GroupNavigation({
   canManage,
   currentUserId,
   group,
+  hideMutedChannels,
   localAvatar,
   localSpeaking,
   members,
+  onCreateCategory,
+  onCreateChannel,
+  onCreateForum,
+  onEvents,
+  onInvite,
+  onToggleHideMuted,
+  onToggleMute,
   onCreateText,
   onCreateVoice,
   onJoinVoice,
@@ -1710,9 +2010,17 @@ function GroupNavigation({
   canManage: boolean;
   currentUserId: string;
   group: WorkspaceGroup;
+  hideMutedChannels: boolean;
   localAvatar: string;
   localSpeaking: boolean;
   members: WorkspaceMember[];
+  onCreateCategory: () => void;
+  onCreateChannel: () => void;
+  onCreateForum: () => void;
+  onEvents: () => void;
+  onInvite: () => void;
+  onToggleHideMuted: () => void;
+  onToggleMute: (channelId: string) => void;
   onCreateText: () => void;
   onCreateVoice: () => void;
   onJoinVoice: (id: string) => void;
@@ -1720,12 +2028,95 @@ function GroupNavigation({
   onSelectText: (id: string) => void;
   selectedConversationId: string;
 }) {
+  const [serverMenuOpen, setServerMenuOpen] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const visibleChannels = group.channels.filter(
+    (channel) =>
+      canViewWorkspaceChannel(group, channel, currentUserId) &&
+      (!hideMutedChannels || !channel.muted),
+  );
+  const categories = group.categories ?? [];
+  const runServerAction = (action: () => void) => {
+    setServerMenuOpen(false);
+    action();
+  };
+  const selectChannel = (conversationId: string) => {
+    setServerMenuOpen(false);
+    onSelectText(conversationId);
+  };
+  const joinVoice = (conversationId: string) => {
+    setServerMenuOpen(false);
+    onJoinVoice(conversationId);
+  };
+
+  const renderChannelSections = (channels: WorkspaceChannel[], showHeadings = true) => {
+    const textChannels = channels.filter(({ kind }) => kind === 'text');
+    const forumChannels = channels.filter(({ kind }) => kind === 'forum');
+    const voiceChannels = channels.filter(({ kind }) => kind === 'voice');
+    return (
+      <>
+        <ChannelSection
+          channels={textChannels}
+          selectedConversationId={selectedConversationId}
+          onCreate={onCreateText}
+          onSelect={selectChannel}
+          onToggleMute={onToggleMute}
+          showHeading={showHeadings}
+          title="Text channels"
+          type="text"
+          localAvatar={localAvatar}
+          localSpeaking={localSpeaking}
+          currentUserId={currentUserId}
+          members={members}
+        />
+        {forumChannels.length || !showHeadings ? (
+          <ChannelSection
+            channels={forumChannels}
+            selectedConversationId={selectedConversationId}
+            onCreate={onCreateForum}
+            onSelect={selectChannel}
+            onToggleMute={onToggleMute}
+            showHeading={showHeadings}
+            title="Forum channels"
+            type="forum"
+            localAvatar={localAvatar}
+            localSpeaking={localSpeaking}
+            currentUserId={currentUserId}
+            members={members}
+          />
+        ) : null}
+        <ChannelSection
+          channels={voiceChannels}
+          selectedConversationId={selectedConversationId}
+          onCreate={onCreateVoice}
+          onSelect={joinVoice}
+          onToggleMute={onToggleMute}
+          showHeading={showHeadings}
+          title="Voice channels"
+          type="voice"
+          localAvatar={localAvatar}
+          localSpeaking={localSpeaking}
+          currentUserId={currentUserId}
+          members={members}
+        />
+      </>
+    );
+  };
+
   return (
     <>
       <div className="community-heading">
-        <ServerProfileIcon className="community-heading-icon" group={group} />
-        <span className="community-heading-name">{group.name}</span>
-        <CaretDown size={14} />
+        <button
+          type="button"
+          className="community-heading-trigger"
+          aria-expanded={serverMenuOpen}
+          aria-label={`${group.name} server menu`}
+          onClick={() => setServerMenuOpen((open) => !open)}
+        >
+          <ServerProfileIcon className="community-heading-icon" group={group} />
+          <span className="community-heading-name">{group.name}</span>
+          <CaretDown size={14} />
+        </button>
         {canManage ? (
           <button type="button" aria-label="Server settings" onClick={onSettings}>
             <GearSix size={16} />
@@ -1734,29 +2125,71 @@ function GroupNavigation({
         <button type="button" aria-label="Add a group channel" onClick={onCreateText}>
           <Plus size={16} />
         </button>
+        {serverMenuOpen ? (
+          <div className="server-context-menu" role="menu" aria-label={`${group.name} actions`}>
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={hideMutedChannels}
+              onClick={onToggleHideMuted}
+            >
+              <BellSlash size={16} />
+              <span>{hideMutedChannels ? 'Show muted channels' : 'Hide muted channels'}</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runServerAction(onCreateChannel)}>
+              <Plus size={16} />
+              <span>Create channel</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runServerAction(onCreateCategory)}>
+              <Plus size={16} />
+              <span>Create category</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runServerAction(onInvite)}>
+              <UserPlus size={16} />
+              <span>Invite to server</span>
+            </button>
+          </div>
+        ) : null}
       </div>
-      <ChannelSection
-        channels={group.channels.filter(({ kind }) => kind === 'text')}
-        selectedConversationId={selectedConversationId}
-        onCreate={onCreateText}
-        onSelect={onSelectText}
-        type="text"
-        localAvatar={localAvatar}
-        localSpeaking={localSpeaking}
-        currentUserId={currentUserId}
-        members={members}
-      />
-      <ChannelSection
-        channels={group.channels.filter(({ kind }) => kind === 'voice')}
-        selectedConversationId={selectedConversationId}
-        onCreate={onCreateVoice}
-        onSelect={onJoinVoice}
-        type="voice"
-        localAvatar={localAvatar}
-        localSpeaking={localSpeaking}
-        currentUserId={currentUserId}
-        members={members}
-      />
+      <button type="button" className="server-events-button" onClick={onEvents}>
+        <CalendarBlank size={18} />
+        <span>Events</span>
+        <span className="server-events-count">{group.events?.length ?? 0}</span>
+      </button>
+      {renderChannelSections(visibleChannels.filter((channel) => !channel.categoryId))}
+      {categories.map((category) => {
+        const categoryChannels = visibleChannels.filter(
+          ({ categoryId }) => categoryId === category.id,
+        );
+        const collapsed = collapsedCategories[category.id] ?? category.collapsed ?? false;
+        return (
+          <section className="channel-category" key={category.id}>
+            <div className="channel-category-heading">
+              <button
+                type="button"
+                aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${category.name}`}
+                onClick={() =>
+                  setCollapsedCategories((current) => ({
+                    ...current,
+                    [category.id]: !collapsed,
+                  }))
+                }
+              >
+                {collapsed ? <CaretRight size={13} /> : <CaretDown size={13} />}
+                <span>{category.name}</span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Add channel to ${category.name}`}
+                onClick={onCreateChannel}
+              >
+                <Plus size={15} />
+              </button>
+            </div>
+            {!collapsed ? renderChannelSections(categoryChannels, false) : null}
+          </section>
+        );
+      })}
     </>
   );
 }
@@ -1769,7 +2202,10 @@ function ChannelSection({
   members,
   onCreate,
   onSelect,
+  onToggleMute,
   selectedConversationId,
+  showHeading = true,
+  title,
   type,
 }: {
   channels: WorkspaceChannel[];
@@ -1779,32 +2215,55 @@ function ChannelSection({
   members: WorkspaceMember[];
   onCreate: () => void;
   onSelect: (conversationId: string) => void;
+  onToggleMute: (channelId: string) => void;
   selectedConversationId: string;
-  type: 'text' | 'voice';
+  showHeading?: boolean;
+  title?: string;
+  type: 'text' | 'voice' | 'forum';
 }) {
   return (
-    <div className={`nav-section channel-section ${type === 'voice' ? 'voice-section' : ''}`}>
-      <div className="nav-section-heading">
-        <span>{type === 'voice' ? 'Voice channels' : 'Text channels'}</span>
-        <button type="button" aria-label={`Add a ${type} channel`} onClick={onCreate}>
-          <Plus size={16} />
-        </button>
-      </div>
+    <div
+      className={`nav-section channel-section ${type === 'voice' ? 'voice-section' : ''} ${showHeading ? '' : 'channel-section-compact'}`}
+    >
+      {showHeading ? (
+        <div className="nav-section-heading">
+          <span>{title ?? (type === 'voice' ? 'Voice channels' : 'Text channels')}</span>
+          <button type="button" aria-label={`Add a ${type} channel`} onClick={onCreate}>
+            <Plus size={16} />
+          </button>
+        </div>
+      ) : null}
       {channels.length === 0 ? <p className="channel-empty">No channels yet</p> : null}
       {channels.map((channel) => {
         const active = selectedConversationId === channel.conversationId;
-        if (type === 'text') {
+        if (type === 'text' || type === 'forum') {
           return (
-            <button
-              type="button"
-              key={channel.id}
-              className={`channel-button ${active ? 'channel-button-active' : ''}`}
-              aria-current={active ? 'page' : undefined}
-              onClick={() => onSelect(channel.conversationId)}
-            >
-              <Hash size={18} weight={active ? 'bold' : 'regular'} />
-              <span>{channel.name}</span>
-            </button>
+            <div className="channel-button-row" key={channel.id}>
+              <button
+                type="button"
+                className={`channel-button ${active ? 'channel-button-active' : ''}`}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => onSelect(channel.conversationId)}
+              >
+                {type === 'forum' ? (
+                  <ChatCircleText size={18} weight={active ? 'bold' : 'regular'} />
+                ) : (
+                  <Hash size={18} weight={active ? 'bold' : 'regular'} />
+                )}
+                <span>{channel.name}</span>
+                {channel.isPrivate ? <LockSimple size={14} /> : null}
+                {channel.muted ? <BellSlash size={14} /> : null}
+              </button>
+              <button
+                type="button"
+                className="channel-mute-button"
+                aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
+                aria-pressed={channel.muted}
+                onClick={() => onToggleMute(channel.id)}
+              >
+                {channel.muted ? <BellSlash size={14} /> : <Bell size={14} />}
+              </button>
+            </div>
           );
         }
         const participants = channel.participantIds
@@ -1829,6 +2288,15 @@ function ChannelSection({
               </span>
               <Users size={15} />
               <b>{participants.length}</b>
+            </button>
+            <button
+              type="button"
+              className="voice-channel-mute-button"
+              aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
+              aria-pressed={channel.muted}
+              onClick={() => onToggleMute(channel.id)}
+            >
+              {channel.muted ? <BellSlash size={14} /> : <Bell size={14} />}
             </button>
             {participants.length > 0 ? (
               <div className="voice-connected-list" aria-label={`${channel.name} participants`}>
@@ -1911,6 +2379,8 @@ function ConversationHeader({
           />
         ) : selectedConversation.channelKind === 'voice' ? (
           <SpeakerHigh size={23} weight="fill" />
+        ) : selectedConversation.channelKind === 'forum' ? (
+          <ChatCircleText size={23} weight="bold" />
         ) : (
           <Hash size={23} weight="bold" />
         )}
@@ -1928,7 +2398,9 @@ function ConversationHeader({
               ? selectedConversation.presence
               : selectedConversation.channelKind === 'voice'
                 ? 'Voice, video, screen sharing, and meeting chat.'
-                : `${activeGroup?.name ?? 'Scuttlebutt'} · Build, ship, and improve.`}
+                : selectedConversation.channelKind === 'forum'
+                  ? 'Create posts and keep each discussion focused.'
+                  : `${activeGroup?.name ?? 'Scuttlebutt'} · Build, ship, and improve.`}
           </p>
         </div>
       </div>
@@ -1972,6 +2444,750 @@ function ConversationHeader({
         </label>
       </div>
     </header>
+  );
+}
+
+function ForumChannelView({
+  channel,
+  currentUserId,
+  localAvatar,
+  localUserName,
+  onCreatePost,
+  onReply,
+}: {
+  channel: WorkspaceChannel;
+  currentUserId: string;
+  localAvatar: string;
+  localUserName: string;
+  onCreatePost: (title: string, body: string) => void;
+  onReply: (postId: string, body: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string>();
+  const [replyDraft, setReplyDraft] = useState('');
+  const posts = channel.forumPosts ?? [];
+  const filteredPosts = posts.filter((post) =>
+    `${post.title} ${post.body}`.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  return (
+    <div className="forum-view">
+      <div className="forum-toolbar">
+        <label className="forum-search">
+          <MagnifyingGlass size={18} />
+          <span className="visually-hidden">Search or create a post</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search or create a post..."
+          />
+        </label>
+        <button type="button" className="forum-new-post" onClick={() => setCreateOpen(true)}>
+          <Plus size={16} /> New Post
+        </button>
+      </div>
+      <div className="forum-get-started">
+        <strong>Get Started</strong>
+        <span>Keep each topic focused so everyone can find the conversation later.</span>
+      </div>
+      <div className="forum-post-list">
+        {filteredPosts.length === 0 ? (
+          <div className="forum-empty-state">
+            <ChatCircleText size={34} />
+            <strong>{posts.length ? 'No matching posts' : 'No posts yet'}</strong>
+            <span>Start a discussion for this channel.</span>
+          </div>
+        ) : (
+          filteredPosts.map((post) => {
+            const selected = selectedPostId === post.id;
+            return (
+              <article
+                className={`forum-post-card ${selected ? 'forum-post-card-active' : ''} ${post.authorId === currentUserId ? 'forum-post-own' : ''}`}
+                key={post.id}
+              >
+                <button
+                  type="button"
+                  className="forum-post-summary"
+                  onClick={() => setSelectedPostId(selected ? undefined : post.id)}
+                >
+                  <div className="forum-post-heading">
+                    <strong>{post.title}</strong>
+                    <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <p>{post.body}</p>
+                  <div className="forum-post-meta">
+                    <PersonAvatar image={post.authorAvatar} name={post.authorName} size="small" />
+                    <span>{post.authorName}</span>
+                    <span>·</span>
+                    <span>
+                      {post.replies.length} {post.replies.length === 1 ? 'reply' : 'replies'}
+                    </span>
+                  </div>
+                </button>
+                {selected ? (
+                  <div className="forum-thread">
+                    {post.replies.map((reply) => (
+                      <div className="forum-reply" key={reply.id}>
+                        <PersonAvatar
+                          image={reply.authorAvatar}
+                          name={reply.authorName}
+                          size="small"
+                        />
+                        <div>
+                          <strong>{reply.authorName}</strong>
+                          <p>{reply.body}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <form
+                      className="forum-reply-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!replyDraft.trim()) return;
+                        onReply(post.id, replyDraft);
+                        setReplyDraft('');
+                      }}
+                    >
+                      <PersonAvatar image={localAvatar} name={localUserName} size="small" />
+                      <input
+                        value={replyDraft}
+                        onChange={(event) => setReplyDraft(event.target.value)}
+                        placeholder="Reply to this post"
+                        aria-label={`Reply to ${post.title}`}
+                      />
+                      <button type="submit" disabled={!replyDraft.trim()} aria-label="Send reply">
+                        <PaperPlaneRight size={17} weight="fill" />
+                      </button>
+                    </form>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })
+        )}
+      </div>
+      {createOpen ? (
+        <ForumPostDialog
+          onCancel={() => setCreateOpen(false)}
+          onCreate={(title, body) => {
+            onCreatePost(title, body);
+            setCreateOpen(false);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ForumPostDialog({
+  onCancel,
+  onCreate,
+}: {
+  onCancel: () => void;
+  onCreate: (title: string, body: string) => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <form
+        className="creation-dialog forum-post-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="forum-post-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onCreate(title, body);
+        }}
+      >
+        <div className="creation-dialog-heading">
+          <div>
+            <p className="section-kicker">Forum post</p>
+            <h2 id="forum-post-dialog-title">Start a discussion</h2>
+          </div>
+          <button type="button" aria-label="Close dialog" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <label>
+          <span>Post title</span>
+          <input
+            autoFocus
+            value={title}
+            maxLength={120}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="What are you working on?"
+          />
+        </label>
+        <label>
+          <span>Details</span>
+          <textarea
+            value={body}
+            maxLength={2000}
+            onChange={(event) => setBody(event.target.value)}
+            placeholder="Add context for the discussion"
+          />
+        </label>
+        <div className="creation-dialog-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!title.trim() || !body.trim()}>
+            Create post
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ChannelCreationDialog({
+  group,
+  initialKind,
+  onCancel,
+  onCreate,
+}: {
+  group: WorkspaceGroup;
+  initialKind: WorkspaceChannelKind;
+  onCancel: () => void;
+  onCreate: (draft: ChannelDraft) => void;
+}) {
+  const [kind, setKind] = useState<WorkspaceChannelKind>(initialKind);
+  const [name, setName] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [categoryId, setCategoryId] = useState('');
+  const [allowedRoleIds, setAllowedRoleIds] = useState<string[]>([]);
+  const roles = serverSettingsFor(group).roles;
+
+  const toggleRole = (roleId: string) => {
+    setAllowedRoleIds((current) =>
+      current.includes(roleId) ? current.filter((id) => id !== roleId) : [...current, roleId],
+    );
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <form
+        className="creation-dialog channel-creation-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="channel-creation-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onCreate({ kind, name, isPrivate, categoryId: categoryId || undefined, allowedRoleIds });
+        }}
+      >
+        <div className="creation-dialog-heading">
+          <div>
+            <p className="section-kicker">{group.name}</p>
+            <h2 id="channel-creation-title">Create Channel</h2>
+          </div>
+          <button type="button" aria-label="Close dialog" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <fieldset className="channel-type-fieldset">
+          <legend>Channel Type</legend>
+          {(
+            [
+              ['text', 'Text', 'Send messages, images, GIFs, emoji, opinions, and puns'],
+              ['voice', 'Voice', 'Hang out together with voice, video, and screen share'],
+              ['forum', 'Forum', 'Create a space for organized discussions'],
+            ] as const
+          ).map(([value, label, description]) => (
+            <label className="channel-type-option" key={value}>
+              <input
+                type="radio"
+                name="channel-type"
+                value={value}
+                checked={kind === value}
+                onChange={() => setKind(value)}
+              />
+              {value === 'text' ? (
+                <Hash size={19} />
+              ) : value === 'voice' ? (
+                <SpeakerHigh size={19} />
+              ) : (
+                <ChatCircleText size={19} />
+              )}
+              <span>
+                <strong>{label}</strong>
+                <small>{description}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <label>
+          <span>{kind === 'voice' ? 'Channel Name' : 'Channel Name'}</span>
+          <input
+            value={name}
+            maxLength={48}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={
+              kind === 'voice' ? 'Team Standup' : kind === 'forum' ? 'vibe-coding' : 'new-channel'
+            }
+          />
+        </label>
+        <label className="channel-category-select">
+          <span>Category</span>
+          <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+            <option value="">No category</option>
+            {(group.categories ?? []).map((category) => (
+              <option value={category.id} key={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="channel-private-toggle">
+          <span>
+            <strong>
+              <LockSimple size={15} /> Private Channel
+            </strong>
+            <small>Only selected members and roles will be able to view this channel.</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={isPrivate}
+            onChange={(event) => setIsPrivate(event.target.checked)}
+          />
+        </label>
+        {isPrivate ? (
+          <fieldset className="channel-role-fieldset">
+            <legend>Who can access this channel?</legend>
+            {roles.map((role) => (
+              <label key={role.id}>
+                <input
+                  type="checkbox"
+                  checked={allowedRoleIds.includes(role.id)}
+                  onChange={() => toggleRole(role.id)}
+                />
+                <span style={{ color: role.color }}>{role.name}</span>
+              </label>
+            ))}
+            {!allowedRoleIds.length ? (
+              <small>Only the server owner can see it until a role is selected.</small>
+            ) : null}
+          </fieldset>
+        ) : null}
+        <div className="creation-dialog-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!name.trim()}>
+            Create Channel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CategoryCreationDialog({
+  groupName,
+  onCancel,
+  onCreate,
+}: {
+  groupName: string;
+  onCancel: () => void;
+  onCreate: (name: string) => void;
+}) {
+  const [name, setName] = useState('');
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <form
+        className="creation-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="category-creation-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onCreate(name);
+        }}
+      >
+        <div className="creation-dialog-heading">
+          <div>
+            <p className="section-kicker">{groupName}</p>
+            <h2 id="category-creation-title">Create Category</h2>
+          </div>
+          <button type="button" aria-label="Close dialog" onClick={onCancel}>
+            <X size={18} />
+          </button>
+        </div>
+        <label>
+          <span>Category Name</span>
+          <input
+            autoFocus
+            value={name}
+            maxLength={48}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Information"
+          />
+        </label>
+        <p>Group related text, forum, and voice channels under one collapsible heading.</p>
+        <div className="creation-dialog-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!name.trim()}>
+            Create Category
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function EventsPanel({
+  currentUserId,
+  group,
+  onCancel,
+  onCreate,
+}: {
+  currentUserId: string;
+  group: WorkspaceGroup;
+  onCancel: () => void;
+  onCreate: (event: ServerEvent) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [locationType, setLocationType] = useState<'external' | 'voice'>('voice');
+  const voiceChannels = group.channels.filter(({ kind }) => kind === 'voice');
+  const textChannels = group.channels.filter(({ kind }) => kind === 'text');
+  const [voiceChannelId, setVoiceChannelId] = useState(voiceChannels[0]?.id ?? '');
+  const [externalLocation, setExternalLocation] = useState('');
+  const [title, setTitle] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startTime, setStartTime] = useState('19:00');
+  const [frequency, setFrequency] = useState<ServerEventFrequency>('once');
+  const [description, setDescription] = useState('');
+  const [postChannelId, setPostChannelId] = useState(textChannels[0]?.id ?? '');
+  const [coverImage, setCoverImage] = useState('');
+  const [error, setError] = useState('');
+
+  const selectedVoice = voiceChannels.find(({ id }) => id === voiceChannelId);
+  const location = locationType === 'voice' ? (selectedVoice?.name ?? '') : externalLocation.trim();
+
+  const handleCoverChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    try {
+      setCoverImage(await optimizeAvatar(file));
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Cover image could not be processed.');
+    }
+  };
+
+  const nextStep = () => {
+    if (step === 1 && !location) {
+      setError(locationType === 'voice' ? 'Choose a voice channel.' : 'Add an event location.');
+      return;
+    }
+    if (step === 2 && (!title.trim() || !startDate || !startTime)) {
+      setError('Add an event topic, date, and time.');
+      return;
+    }
+    setError('');
+    setStep((current) => (current === 3 ? 3 : ((current + 1) as 1 | 2 | 3)));
+  };
+
+  const create = () => {
+    if (!location || !title.trim()) return;
+    onCreate({
+      id: `event-${Date.now()}`,
+      title: title.trim(),
+      description: description.trim(),
+      startDate,
+      startTime,
+      frequency,
+      locationType,
+      location,
+      postChannelId: postChannelId || undefined,
+      coverImage: coverImage || undefined,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUserId,
+    });
+  };
+
+  return (
+    <div className="events-backdrop" role="presentation" onMouseDown={onCancel}>
+      <section
+        className="events-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="events-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="events-panel-header">
+          <div>
+            <p className="section-kicker">{group.name}</p>
+            <h2 id="events-title">
+              <CalendarBlank size={22} /> Events
+            </h2>
+          </div>
+          <button type="button" aria-label="Close events" onClick={onCancel}>
+            <X size={20} />
+          </button>
+        </header>
+        {!creating ? (
+          <>
+            <div className="events-panel-toolbar">
+              <span>
+                {group.events?.length
+                  ? `${group.events.length} upcoming event${group.events.length === 1 ? '' : 's'}`
+                  : 'No upcoming events'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(true);
+                  setStep(1);
+                }}
+              >
+                <Plus size={16} /> Create Event
+              </button>
+            </div>
+            {group.events?.length ? (
+              <div className="events-list">
+                {group.events.map((event) => (
+                  <article className="event-card" key={event.id}>
+                    {event.coverImage ? (
+                      <img src={event.coverImage} alt="" />
+                    ) : (
+                      <span className="event-card-icon">
+                        <CalendarBlank size={25} />
+                      </span>
+                    )}
+                    <div>
+                      <strong>{event.title}</strong>
+                      <span>
+                        {new Date(`${event.startDate}T${event.startTime}`).toLocaleString()}
+                      </span>
+                      <span>
+                        <MapPin size={14} /> {formatEventLocation(event)}
+                      </span>
+                      {event.frequency !== 'once' ? (
+                        <span>
+                          <Repeat size={14} /> {formatEventFrequency(event.frequency)}
+                        </span>
+                      ) : null}
+                      {event.description ? <p>{event.description}</p> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="events-empty-state">
+                <CalendarBlank size={42} />
+                <strong>There are no upcoming events.</strong>
+                <span>
+                  Schedule an event for a voice channel, external link, or in-person location.
+                </span>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="event-wizard">
+            <div className="event-wizard-steps" aria-label="Event creation steps">
+              {['Location', 'Event Info', 'Review'].map((label, index) => (
+                <span
+                  className={step === index + 1 ? 'active' : step > index + 1 ? 'complete' : ''}
+                  key={label}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+            {step === 1 ? (
+              <div className="event-wizard-step">
+                <h3>Where is your event?</h3>
+                <p>So no one gets lost on where to go.</p>
+                <label className="event-location-option">
+                  <input
+                    type="radio"
+                    checked={locationType === 'voice'}
+                    onChange={() => setLocationType('voice')}
+                  />
+                  <SpeakerHigh size={20} />
+                  <span>
+                    <strong>Voice Channel</strong>
+                    <small>Hang out with voice, video, screenshare, and Go Live.</small>
+                  </span>
+                </label>
+                {locationType === 'voice' ? (
+                  <label className="event-select-field">
+                    <span>Select a channel</span>
+                    <select
+                      value={voiceChannelId}
+                      onChange={(event) => setVoiceChannelId(event.target.value)}
+                    >
+                      <option value="">Choose a voice channel</option>
+                      {voiceChannels.map((channel) => (
+                        <option value={channel.id} key={channel.id}>
+                          {channel.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="event-location-option">
+                  <input
+                    type="radio"
+                    checked={locationType === 'external'}
+                    onChange={() => setLocationType('external')}
+                  />
+                  <MapPin size={20} />
+                  <span>
+                    <strong>Somewhere Else</strong>
+                    <small>Text channel, external link, or in-person location.</small>
+                  </span>
+                </label>
+                {locationType === 'external' ? (
+                  <input
+                    className="event-location-input"
+                    value={externalLocation}
+                    onChange={(event) => setExternalLocation(event.target.value)}
+                    placeholder="Add a location, link, or something."
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {step === 2 ? (
+              <div className="event-wizard-step">
+                <h3>What's your event about?</h3>
+                <p>Fill out the details of your event.</p>
+                <label>
+                  <span>Event Topic *</span>
+                  <input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="What's your event?"
+                  />
+                </label>
+                <div className="event-two-column">
+                  <label>
+                    <span>Start Date *</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(event) => setStartDate(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>Start Time *</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(event) => setStartTime(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <label>
+                  <span>Event Frequency *</span>
+                  <select
+                    value={frequency}
+                    onChange={(event) => setFrequency(event.target.value as ServerEventFrequency)}
+                  >
+                    <option value="once">Does not repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Description</span>
+                  <textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="Tell people a little more about your event."
+                  />
+                </label>
+                <label>
+                  <span>Post announcement in</span>
+                  <select
+                    value={postChannelId}
+                    onChange={(event) => setPostChannelId(event.target.value)}
+                  >
+                    <option value="">Do not post</option>
+                    {textChannels.map((channel) => (
+                      <option value={channel.id} key={channel.id}>
+                        # {channel.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="event-cover-upload">
+                  <span>Cover Image</span>
+                  <small>Optional image for the event card.</small>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => void handleCoverChange(event)}
+                  />
+                </label>
+                {coverImage ? (
+                  <img className="event-cover-preview" src={coverImage} alt="Event cover preview" />
+                ) : null}
+              </div>
+            ) : step === 3 ? (
+              <div className="event-wizard-step event-review-step">
+                <div className="event-review-card">
+                  <div className="event-review-date">
+                    <CalendarBlank size={20} />
+                    <strong>{new Date(`${startDate}T${startTime}`).toLocaleString()}</strong>
+                  </div>
+                  <h3>{title || 'Untitled event'}</h3>
+                  <p>{description || 'No description added.'}</p>
+                  <span>
+                    <MapPin size={15} />{' '}
+                    {formatEventLocation({ location, locationType } as ServerEvent)}
+                  </span>
+                  {frequency !== 'once' ? (
+                    <span>
+                      <Repeat size={15} /> {formatEventFrequency(frequency)}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="event-review-note">
+                  This event will be visible to members of {group.name}.
+                </p>
+              </div>
+            ) : null}
+            {error ? (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="event-wizard-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  if (step === 1) setCreating(false);
+                  else setStep((current) => (current - 1) as 1 | 2 | 3);
+                }}
+              >
+                {step === 1 ? 'Cancel' : 'Back'}
+              </button>
+              {step < 3 ? (
+                <button type="button" onClick={nextStep}>
+                  Next
+                </button>
+              ) : (
+                <button type="button" onClick={create}>
+                  Create Event
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 

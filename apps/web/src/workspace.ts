@@ -4,12 +4,59 @@ import type { PresenceIndicatorStatus } from './presence.js';
 export type AppSurface = 'dms' | 'explore' | 'groups' | 'threads';
 export type DialogMode = 'dm' | 'group' | 'text-channel' | 'voice-channel';
 
+export type WorkspaceChannelKind = 'text' | 'voice' | 'forum';
+
 export interface WorkspaceMember {
   avatar: string;
   id: string;
   name: string;
   note: string;
+  roleIds?: string[];
   status: PresenceIndicatorStatus;
+}
+
+export interface WorkspaceCategory {
+  collapsed?: boolean;
+  id: string;
+  name: string;
+}
+
+export interface ForumReply {
+  authorAvatar: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  id: string;
+}
+
+export interface ForumPost {
+  authorAvatar: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  id: string;
+  replies: ForumReply[];
+  title: string;
+}
+
+export type ServerEventFrequency = 'daily' | 'monthly' | 'once' | 'weekly';
+export type ServerEventLocationType = 'external' | 'voice';
+
+export interface ServerEvent {
+  coverImage?: string;
+  createdAt: string;
+  createdBy: string;
+  description: string;
+  frequency: ServerEventFrequency;
+  id: string;
+  location: string;
+  locationType: ServerEventLocationType;
+  postChannelId?: string;
+  startDate: string;
+  startTime: string;
+  title: string;
 }
 
 export interface CustomSound {
@@ -31,7 +78,12 @@ export interface CustomEmote {
 export interface WorkspaceChannel {
   conversationId: string;
   id: string;
-  kind: 'text' | 'voice';
+  kind: WorkspaceChannelKind;
+  categoryId?: string;
+  forumPosts?: ForumPost[];
+  isPrivate?: boolean;
+  allowedRoleIds?: string[];
+  muted?: boolean;
   name: string;
   participantIds: string[];
 }
@@ -97,9 +149,11 @@ export interface ServerSettings {
 }
 
 export interface WorkspaceGroup {
+  categories?: WorkspaceCategory[];
   channels: WorkspaceChannel[];
   description: string;
   emotes?: CustomEmote[];
+  events?: ServerEvent[];
   icon: 'chat' | 'garden' | 'orbit' | 'summit';
   id: string;
   members?: WorkspaceMember[];
@@ -351,12 +405,19 @@ export function conversationForChannel(
     id: channel.conversationId,
     title: channel.name,
     kind: 'channel',
-    avatarLabel: channel.kind === 'voice' ? 'VC' : '#',
+    avatarLabel: channel.kind === 'voice' ? 'VC' : channel.kind === 'forum' ? 'F' : '#',
     presence:
       channel.kind === 'voice'
         ? `Voice room · ${channel.participantIds.length} connected`
-        : `${group.name} text channel`,
-    preview: channel.kind === 'voice' ? 'Meeting chat and voice room.' : 'Start the conversation.',
+        : channel.kind === 'forum'
+          ? `${group.name} forum channel`
+          : `${group.name} text channel`,
+    preview:
+      channel.kind === 'voice'
+        ? 'Meeting chat and voice room.'
+        : channel.kind === 'forum'
+          ? 'Start a discussion post.'
+          : 'Start the conversation.',
     updatedAt: 'Now',
     unreadCount: 0,
     encrypted: true,

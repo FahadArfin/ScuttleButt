@@ -72,3 +72,32 @@ The reference contains Discord-specific avatar art, OS tray chrome, and account 
 - Native operating-system notification suppression for Do Not Disturb can be added when Scuttlebutt gains a desktop notification subsystem.
 
 final result: passed
+
+## Server administration, forums, and events QA
+
+### Comparison targets
+
+- Server action menu: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-fb200be0-ca2c-4b04-8d52-e2163ec295af.png`
+- Forum channel: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-31682cc5-5387-4b4c-bc31-0429c65accef.png`
+- Events panel: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-78cf4cb3-ea77-409d-b5e3-389b5aef1fe2.png`
+- Implementation URL: `http://localhost:5173/`
+- Browser state: Quick Controls Test group with the server menu, Planning category, ideas forum, and Events panel exercised at a 1280 x 720 desktop viewport (DPR 1).
+
+### Comparison and interaction findings
+
+- The server menu follows the supplied Discord hierarchy with Hide muted channels, Create channel, Create category, and Invite to server actions. Menu actions are keyboard-addressable and the menu closes when a channel is selected.
+- Channel creation supports Text, Voice, and Forum types, optional category placement, and private-channel role selection. Private channels with no selected role remain owner-only; members with an allowed role are admitted by the channel visibility predicate.
+- Forum channels provide a search/create-post toolbar, focused subject cards, and inline replies. The created post and reply persisted through the workspace state path during browser QA.
+- Events open as a focused side panel, list upcoming events, and use a three-step Location, Event Info, and Review flow. Voice-channel and external/IRL locations, recurrence, cover images, and text-channel announcements were exercised. A created event appeared in the Events list and its announcement appeared in the selected text channel.
+- Visual comparison with the supplied references found no actionable P0-P2 issues after correcting the server-header and menu-item sizing rules. Icons, spacing, dark surfaces, focus states, and panel hierarchy remain consistent with Scuttlebutt's existing design system.
+
+### Implementation checklist
+
+- [x] Server context menu with mute visibility, channel/category creation, and server invites.
+- [x] Collapsible categories with text, voice, and forum channel sections.
+- [x] Private channel role controls and visibility filtering.
+- [x] Forum posts, search, thread replies, and persistence through the workspace model.
+- [x] Event location, recurrence, details, cover image, review, list, and announcement flow.
+- [x] Typecheck, lint, unit tests, production build, and in-app browser QA completed.
+
+final result: passed
