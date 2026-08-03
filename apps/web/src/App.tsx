@@ -1,12 +1,16 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   ArrowClockwise,
@@ -216,6 +220,58 @@ export function MessageRow({
   onRetry: (message: Message) => void;
 }) {
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [reactionPickerPosition, setReactionPickerPosition] = useState<{
+    left: number;
+    top: number;
+  }>();
+  const reactionAnchorRef = useRef<HTMLDivElement>(null);
+  const reactionPickerRef = useRef<HTMLDivElement>(null);
+
+  const positionReactionPicker = useCallback((height = 430, width = 500) => {
+    const anchor = reactionAnchorRef.current?.getBoundingClientRect();
+    if (!anchor) return;
+    const gutter = 12;
+    const gap = 8;
+    const left = Math.max(
+      gutter,
+      Math.min(anchor.left, window.innerWidth - width - gutter),
+    );
+    const above = anchor.top - height - gap;
+    const below = anchor.bottom + gap;
+    const top =
+      above >= gutter
+        ? above
+        : below + height <= window.innerHeight - gutter
+          ? below
+          : Math.max(gutter, window.innerHeight - height - gutter);
+    setReactionPickerPosition({ left, top });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!reactionPickerOpen) return undefined;
+    const reposition = () => {
+      const picker = reactionPickerRef.current;
+      positionReactionPicker(picker?.offsetHeight ?? 430, picker?.offsetWidth ?? 500);
+    };
+    reposition();
+    const frame = window.requestAnimationFrame(reposition);
+    window.addEventListener('resize', reposition);
+    document.addEventListener('scroll', reposition, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', reposition);
+      document.removeEventListener('scroll', reposition, true);
+    };
+  }, [positionReactionPicker, reactionPickerOpen]);
+
+  const toggleReactionPicker = () => {
+    if (reactionPickerOpen) {
+      setReactionPickerOpen(false);
+      return;
+    }
+    positionReactionPicker();
+    setReactionPickerOpen(true);
+  };
 
   return (
     <article
@@ -366,29 +422,16 @@ export function MessageRow({
               <span>{count}</span>
             </button>
           ))}
-          <div className="reaction-add-wrap">
+          <div className="reaction-add-wrap" ref={reactionAnchorRef}>
             <button
               type="button"
               className="reaction-add"
               aria-label="Add reaction"
               aria-expanded={reactionPickerOpen}
-              onClick={() => setReactionPickerOpen((open) => !open)}
+              onClick={toggleReactionPicker}
             >
               <Smiley size={14} />
             </button>
-            {reactionPickerOpen ? (
-              <div className="reaction-picker-popover">
-                <MediaPicker
-                  emotes={emotes}
-                  initialTab="emoji"
-                  onSelect={(asset) => {
-                    const value = reactionValueForAsset(asset);
-                    if (value) onReact(message, value);
-                    setReactionPickerOpen(false);
-                  }}
-                />
-              </div>
-            ) : null}
           </div>
         </div>
         {message.status === 'failed' ? (
@@ -400,6 +443,27 @@ export function MessageRow({
           </div>
         ) : null}
       </div>
+      {reactionPickerOpen && reactionPickerPosition
+        ? createPortal(
+            <div
+              ref={reactionPickerRef}
+              className="reaction-picker-popover"
+              style={{ left: reactionPickerPosition.left, top: reactionPickerPosition.top }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <MediaPicker
+                emotes={emotes}
+                initialTab="emoji"
+                onSelect={(asset) => {
+                  const value = reactionValueForAsset(asset);
+                  if (value) onReact(message, value);
+                  setReactionPickerOpen(false);
+                }}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
     </article>
   );
 }

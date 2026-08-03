@@ -2186,14 +2186,15 @@ img {
 }
 
 .reaction-picker-popover {
-  position: absolute;
-  bottom: 30px;
-  left: 0;
-  z-index: 31;
+  position: fixed;
+  z-index: 1000;
+  pointer-events: auto;
 }
 
 .reaction-picker-popover .media-picker {
   position: static;
+  width: min(500px, calc(100vw - 24px));
+  max-height: min(500px, calc(100vh - 24px));
 }
 
 .composer-tool {
@@ -3967,15 +3968,14 @@ img {
   }
 
   .reaction-picker-popover {
-    position: fixed;
-    right: 10px;
-    bottom: 72px;
-    left: 10px;
+    right: auto;
+    bottom: auto;
   }
 
   .reaction-picker-popover .media-picker {
     position: static;
-    width: 100%;
+    width: min(500px, calc(100vw - 24px));
+    max-height: min(500px, calc(100vh - 24px));
   }
 
   .conversation-header {
