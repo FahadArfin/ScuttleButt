@@ -73,6 +73,45 @@ The reference contains Discord-specific avatar art, OS tray chrome, and account 
 
 final result: passed
 
+## Application settings QA
+
+### Comparison targets
+
+- Settings navigation and Account reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-77dee017-9e6b-4f40-8084-875e9a104d3e.png`
+- Settings sidebar reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-52e31b27-f555-4abf-beac-8ab23eeba2a3.png`
+- Voice & Video reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-7794c164-ad8d-4143-b078-0844924a828a.png`
+- Accessibility reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-d5789edf-fa77-4175-baab-762d4ee29110.png`
+- Language & Time reference: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-8478b07d-c1a7-4c30-8bf3-e802c1cd8e29.png`
+- Implementation screenshots: `C:/Users/fahad/OneDrive/Documents/Scuttlebutt/artifacts/design-qa/application-settings-account.png`, `C:/Users/fahad/OneDrive/Documents/Scuttlebutt/artifacts/design-qa/application-settings-voice.png`
+- Implementation URL: `http://localhost:5173/`
+- Browser state: local user, application settings open from the bottom-left gear, Account and Voice & Video sections exercised at a 1280 x 720 CSS viewport (DPR 1).
+
+### Evidence and comparison
+
+- The bottom-left gear now opens a dedicated application-settings dialog instead of the profile popover or server settings. The dialog uses a Discord-inspired two-column layout with a persistent profile header, search field, grouped navigation, scrollable content, close control, and logout action.
+- Account, Password & Security, Data & Privacy, Messaging Permissions, Notifications, Voice & Video, Appearance, Accessibility, Language & Time, Activity Privacy, Connected Apps, and Developer sections are addressable from the sidebar. The existing server settings flow remains separate.
+- Functional preference controls were exercised in the browser: profile editor handoff, microphone/camera permission tests, microphone and speaker selection/volume controls, automatic voice activity versus push-to-talk, theme selection, density/text sizing, reduced motion, high contrast, notification and privacy toggles, export/clear-drafts actions, language, and time format.
+- The implementation reuses the existing Scuttlebutt avatar and Phosphor icon system. No Discord-specific images or content were copied; the supplied references were used for hierarchy, spacing, contrast, and interaction shape.
+
+### Findings
+
+No actionable P0, P1, or P2 findings remain for the implemented application-settings flow.
+
+The current web client exposes settings that can work locally today. Account password changes, MFA enrollment, logged-in-device management, and connected-app integrations remain provider/backend-dependent and are clearly marked as unavailable rather than presented as fake controls.
+
+### Implementation checklist
+
+- [x] Bottom-left gear opens application settings, not server settings.
+- [x] Discord-style grouped settings navigation, search, profile header, close, and logout.
+- [x] Account/profile handoff to the existing profile editor.
+- [x] Voice & Video controls with browser microphone/camera permission tests and voice mode/profile settings.
+- [x] Appearance, accessibility, notifications, privacy, language/time, activity, connections, and developer sections.
+- [x] Per-user local persistence for application preferences and shared voice settings.
+- [x] Desktop screenshots captured and compared with the supplied references.
+- [x] Typecheck, lint, unit tests, production build, and browser interaction checks completed.
+
+final result: passed
+
 ## Top server banner and enlarged profile icon QA
 
 ### Comparison target

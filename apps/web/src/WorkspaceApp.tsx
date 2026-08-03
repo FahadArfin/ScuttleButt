@@ -112,6 +112,12 @@ import {
 } from './workspace.js';
 import { ServerSettingsDialog, type ServerSettingsSection } from './server-settings.js';
 import {
+  ApplicationSettingsDialog,
+  loadApplicationPreferences,
+  saveApplicationPreferences,
+  type ApplicationPreferences,
+} from './application-settings.js';
+import {
   normalizePresenceStatus,
   normalizePresenceIndicatorStatus,
   presenceLabel,
@@ -140,7 +146,7 @@ const HIDDEN_MUTED_GROUPS_STORAGE_KEY = 'scuttlebutt:hidden-muted-groups:v1';
 const SHOW_SERVER_PROFILE_BANNER = true;
 const SHOW_GROUP_WORKSPACE_HEADER = false;
 
-interface UserProfile {
+export interface UserProfile {
   avatar: string;
   bannerColor: string;
   bio: string;
@@ -314,6 +320,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [membersVisible, setMembersVisible] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
   const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
+  const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>();
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
   const [channelDialogKind, setChannelDialogKind] = useState<WorkspaceChannelKind>('text');
@@ -347,6 +354,9 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     outgoing: [],
   });
   const [profile, setProfile] = useState(() => loadProfile(user));
+  const [applicationPreferences, setApplicationPreferences] = useState(() =>
+    loadApplicationPreferences(user.id),
+  );
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(!googleCredential);
@@ -1138,6 +1148,17 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     setServerSettingsOpen(true);
   };
 
+  const updateApplicationPreferences = (next: ApplicationPreferences) => {
+    setApplicationPreferences(next);
+    saveApplicationPreferences(user.id, next);
+  };
+
+  const logOut = () => {
+    sessionStorage.removeItem('scuttlebutt:user');
+    sessionStorage.removeItem('scuttlebutt:google-credential');
+    window.location.reload();
+  };
+
   const selectPresence = async (next: PresenceStatus) => {
     const previous = profile.presence;
     setProfile((current) => ({ ...current, presence: next }));
@@ -1197,7 +1218,15 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       : '';
 
   return (
-    <main className="app-shell" data-testid={E2E_SELECTORS.appShell}>
+    <main
+      className="app-shell"
+      data-testid={E2E_SELECTORS.appShell}
+      data-app-theme={applicationPreferences.theme}
+      data-density={applicationPreferences.density}
+      data-high-contrast={applicationPreferences.highContrast ? 'true' : 'false'}
+      data-reduced-motion={applicationPreferences.reducedMotion ? 'true' : 'false'}
+      data-text-size={applicationPreferences.textSize}
+    >
       <section
         className={`app-window ${activeSurface === 'groups' && activeGroup ? 'server-profile-themed' : ''} ${showMembers ? '' : 'members-collapsed'} ${mobileNavigationOpen ? 'mobile-navigation-open' : 'mobile-conversation-open'}`}
         style={serverThemeStyle(activeSurface === 'groups' ? activeGroup : undefined)}
@@ -1482,8 +1511,9 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             <IconButton
               label="User settings"
               onClick={() => {
-                setProfileOpen(true);
+                setProfileOpen(false);
                 setPresenceMenuOpen(false);
+                setApplicationSettingsOpen(true);
               }}
             >
               <GearSix size={18} />
@@ -1847,6 +1877,20 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
             setProfileDialogOpen(false);
             setNotice({ tone: 'info', text: 'Profile updated on this device.' });
           }}
+        />
+      ) : null}
+      {applicationSettingsOpen ? (
+        <ApplicationSettingsDialog
+          onChange={updateApplicationPreferences}
+          onClose={() => setApplicationSettingsOpen(false)}
+          onEditProfile={() => {
+            setApplicationSettingsOpen(false);
+            setProfileDialogOpen(true);
+          }}
+          onLogout={logOut}
+          preferences={applicationPreferences}
+          profile={profile}
+          user={user}
         />
       ) : null}
       {groupInviteOpen && activeGroup ? (

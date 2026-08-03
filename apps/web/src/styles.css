@@ -5181,6 +5181,801 @@ img {
   background: #5865f2;
 }
 
+/* Application settings */
+.app-shell[data-app-theme='dim'] {
+  --canvas: #11151d;
+  --rail: #131923;
+  --sidebar: #1a202b;
+  --surface: #202734;
+  --surface-raised: #283141;
+  --surface-soft: #303a4d;
+  --line: #394456;
+  --line-soft: #303a48;
+}
+
+.app-shell[data-app-theme='amoled'] {
+  --canvas: #000;
+  --rail: #050505;
+  --sidebar: #090b0f;
+  --surface: #0d0f12;
+  --surface-raised: #15181e;
+  --surface-soft: #1b1f27;
+  --line: #272c35;
+  --line-soft: #20242b;
+}
+
+.app-shell[data-density='compact'] .channel-button,
+.app-shell[data-density='compact'] .member-row {
+  min-height: 34px;
+}
+
+.app-shell[data-density='spacious'] .channel-button,
+.app-shell[data-density='spacious'] .member-row {
+  min-height: 48px;
+}
+
+.app-shell[data-text-size='18'] .message-body,
+.app-shell[data-text-size='20'] .message-body {
+  font-size: 17px;
+}
+
+.app-shell[data-text-size='20'] .message-body {
+  font-size: 19px;
+}
+
+.app-shell[data-high-contrast='true'] {
+  --line: #67758e;
+  --line-soft: #59677d;
+  --muted: #d4d9e4;
+  --subtle: #b7c0d0;
+}
+
+.app-shell[data-reduced-motion='true'] * {
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+.application-settings-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: stretch;
+  background: rgb(2 3 5 / 88%);
+}
+
+.application-settings-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  width: min(1400px, 100%);
+  height: min(100%, 980px);
+  margin: auto;
+  overflow: hidden;
+  border: 1px solid #2d3440;
+  border-radius: 14px;
+  color: #f0f3fa;
+  background: #0e1014;
+  box-shadow: 0 34px 100px rgb(0 0 0 / 65%);
+}
+
+.application-settings-sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 20px 14px 14px;
+  border-right: 1px solid #262b33;
+  background: #0b0c0f;
+}
+
+.application-settings-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 8px 16px;
+}
+
+.application-settings-user > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.application-settings-user strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application-settings-user button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  padding: 0;
+  color: #9b9faa;
+  font-size: 11px;
+}
+
+.application-settings-user button:hover {
+  color: #c9d0ff;
+}
+
+.application-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-bottom: 13px;
+  padding: 0 10px;
+  border: 1px solid #2d323c;
+  border-radius: 8px;
+  color: #9b9faa;
+}
+
+.application-settings-search:focus-within {
+  border-color: #6d7cff;
+}
+
+.application-settings-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #f0f3fa;
+  background: transparent;
+  font-size: 12px;
+}
+
+.application-settings-search input::placeholder {
+  color: #777d89;
+}
+
+.application-settings-nav {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.application-settings-nav-group {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid #252930;
+}
+
+.application-settings-nav-group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.application-settings-nav-group > p {
+  margin: 0 8px 5px;
+  color: #8a8f9a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.application-settings-nav-group button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 7px;
+  color: #969aa6;
+  text-align: left;
+  font-size: 13px;
+}
+
+.application-settings-nav-group button:hover,
+.application-settings-nav-group button.active {
+  color: #f1f3f9;
+  background: #292a2f;
+}
+
+.application-settings-nav-group button.active {
+  font-weight: 650;
+}
+
+.application-settings-logout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 13px 9px 10px;
+  border-top: 1px solid #252930;
+  color: #ed7177;
+  text-align: left;
+  font-size: 13px;
+}
+
+.application-settings-logout:hover {
+  color: #ff9a9d;
+}
+
+.application-settings-version {
+  padding: 0 9px;
+  color: #686d78;
+  font-size: 9px;
+}
+
+.application-settings-main {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 50px minmax(0, 1fr);
+  background: #111318;
+}
+
+.application-settings-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid #292e37;
+  color: #dce0e9;
+  font-size: 14px;
+}
+
+.application-settings-main-header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 7px;
+  color: #a8adb9;
+}
+
+.application-settings-main-header button:hover {
+  color: #f4f5f8;
+  background: #252a32;
+}
+
+.application-settings-content {
+  width: min(820px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 32px 48px 70px;
+  overflow-y: auto;
+}
+
+.application-settings-section-header {
+  margin-bottom: 28px;
+}
+
+.application-settings-section-header h1 {
+  margin: 0 0 6px;
+  color: #eef0f5;
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.application-settings-section-header > p:not(.section-kicker) {
+  max-width: 680px;
+  margin: 0;
+  color: #9ba1af;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.application-settings-section-header .section-kicker {
+  margin-bottom: 8px;
+}
+
+.application-settings-section {
+  padding: 24px 0;
+  border-top: 1px solid #2a2e36;
+}
+
+.application-settings-section h2 {
+  margin: 0 0 14px;
+  color: #e5e8ef;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.application-settings-muted {
+  margin: 0 0 16px;
+  color: #8e95a4;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.application-settings-card {
+  border: 1px solid #303540;
+  border-radius: 11px;
+  background: #17191f;
+}
+
+.application-settings-account-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  padding: 18px;
+}
+
+.application-settings-account-card > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.application-settings-account-card strong {
+  font-size: 16px;
+}
+
+.application-settings-account-card small,
+.application-settings-account-card span {
+  overflow: hidden;
+  color: #9ea4b1;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 66px;
+  padding: 14px 0;
+  border-bottom: 1px solid #252a32;
+}
+
+.application-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.application-settings-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.application-settings-row strong {
+  color: #e3e6ee;
+  font-size: 13px;
+}
+
+.application-settings-row small {
+  max-width: 550px;
+  color: #9299a7;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.application-settings-row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.application-settings-value {
+  max-width: 280px;
+  overflow: hidden;
+  color: #aeb4c1 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application-settings-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #3a404c;
+  border-radius: 8px;
+  color: #e6e9f1;
+  background: #24272e;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.application-settings-button:hover {
+  border-color: #56617c;
+  background: #2d323c;
+}
+
+.application-settings-button.primary {
+  border-color: #6575ef;
+  color: white;
+  background: #5865f2;
+}
+
+.application-settings-button.primary:hover {
+  background: #6d79ff;
+}
+
+.application-settings-button.danger {
+  color: #ff9a9d;
+}
+
+.application-settings-button:disabled {
+  opacity: 0.5;
+}
+
+.application-settings-toggle {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  padding: 2px;
+  border: 1px solid #3b414d;
+  border-radius: 14px;
+  background: #17191e;
+}
+
+.application-settings-toggle span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f3f4f7;
+  transition: transform 140ms ease;
+}
+
+.application-settings-toggle.active {
+  border-color: #6575ef;
+  background: #5865f2;
+}
+
+.application-settings-toggle.active span {
+  transform: translateX(17px);
+}
+
+.application-settings-status-card,
+.application-settings-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 16px;
+}
+
+.application-settings-status-card > span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  color: #72dea6;
+  background: #123d2a;
+}
+
+.application-settings-status-card > div,
+.application-settings-info-card > div {
+  display: grid;
+  gap: 4px;
+}
+
+.application-settings-status-card strong,
+.application-settings-info-card strong {
+  color: #e2e5ec;
+  font-size: 13px;
+}
+
+.application-settings-status-card small,
+.application-settings-info-card p {
+  margin: 0;
+  color: #969dab;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.application-settings-info-card {
+  margin-top: 22px;
+  color: #9eabff;
+  background: #171b29;
+}
+
+.application-settings-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #39446f;
+  border-radius: 7px;
+  color: #b8c2ff;
+  background: #1d2340;
+  font-size: 11px;
+}
+
+.application-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.application-settings-device-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.application-settings-device-grid label,
+.application-settings-field,
+.application-settings-range-label {
+  display: grid;
+  gap: 8px;
+}
+
+.application-settings-device-grid label > span,
+.application-settings-field > span,
+.application-settings-range-label > span {
+  color: #d8dce5;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.application-settings-select,
+.application-settings-field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid #353b47;
+  border-radius: 8px;
+  outline: 0;
+  color: #e8eaf1;
+  background: #0c0e12;
+  font-size: 12px;
+}
+
+.application-settings-device-grid input[type='range'],
+.application-settings-range-label input[type='range'] {
+  width: 100%;
+  accent-color: #6575ef;
+}
+
+.application-settings-test-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 9px;
+  background: #191c23;
+}
+
+.application-settings-test-row span {
+  color: #9ca3b0;
+  font-size: 11px;
+}
+
+.application-settings-test-row span.error,
+.application-settings-camera-state.blocked {
+  color: #ff9b9f;
+}
+
+.application-settings-radio-choice {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  color: #c8cdd8;
+  text-align: left;
+}
+
+.application-settings-radio-choice:hover {
+  color: #f2f3f7;
+}
+
+.application-settings-radio-dot {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  margin-top: 1px;
+  border: 1px solid #68717e;
+  border-radius: 50%;
+}
+
+.application-settings-radio-choice.active .application-settings-radio-dot {
+  border: 6px solid #6575ef;
+}
+
+.application-settings-radio-choice > span:last-child {
+  display: grid;
+  gap: 4px;
+}
+
+.application-settings-radio-choice strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.application-settings-radio-choice small {
+  color: #9299a7;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.application-settings-camera-preview {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  margin-bottom: 13px;
+  padding: 18px;
+  border: 1px solid #2e3440;
+  border-radius: 9px;
+  background: #07080a;
+}
+
+.application-settings-camera-state {
+  color: #9299a7;
+  font-size: 11px;
+}
+
+.application-settings-camera-state.ready {
+  color: #73dea6;
+}
+
+.application-settings-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.application-settings-theme-card {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid #303641;
+  border-radius: 10px;
+  color: #e1e5ed;
+  text-align: left;
+  background: #171a20;
+}
+
+.application-settings-theme-card:hover,
+.application-settings-theme-card.active {
+  border-color: #6978ef;
+}
+
+.application-settings-theme-card.active {
+  box-shadow: 0 0 0 1px #6978ef inset;
+}
+
+.application-settings-theme-card > svg {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: #aab6ff;
+}
+
+.application-settings-theme-card strong {
+  font-size: 13px;
+}
+
+.application-settings-theme-card small {
+  color: #979eac;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.theme-swatch {
+  display: grid;
+  width: 100%;
+  height: 66px;
+  place-items: center;
+  border-radius: 7px;
+  color: #bdc8ff;
+}
+
+.theme-swatch-midnight {
+  background: linear-gradient(135deg, #151b28, #2e3d68);
+}
+.theme-swatch-dim {
+  background: linear-gradient(135deg, #252c39, #4b5d73);
+}
+.theme-swatch-amoled {
+  background: linear-gradient(135deg, #000, #151515);
+}
+
+.application-settings-range-label strong {
+  color: #91a0ff;
+  font-size: 12px;
+}
+
+.application-settings-size-options {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.application-settings-size-options button {
+  padding: 7px 10px;
+  border: 1px solid #353b47;
+  border-radius: 7px;
+  color: #aab0bd;
+  background: #171a20;
+  font-size: 11px;
+}
+
+.application-settings-size-options button.active {
+  border-color: #6575ef;
+  color: white;
+  background: #28325d;
+}
+
+.application-settings-field {
+  margin-bottom: 26px;
+}
+
+.application-settings-empty {
+  display: grid;
+  place-items: center;
+  min-height: 250px;
+  padding: 30px;
+  border: 1px dashed #3a414d;
+  border-radius: 11px;
+  color: #9198a6;
+  text-align: center;
+}
+
+.application-settings-empty strong {
+  margin-top: 11px;
+  color: #e1e4eb;
+  font-size: 15px;
+}
+
+.application-settings-empty p {
+  max-width: 360px;
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .application-settings-backdrop {
+    position: fixed;
+  }
+
+  .application-settings-shell {
+    grid-template-columns: 1fr;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .application-settings-sidebar {
+    display: none;
+  }
+
+  .application-settings-content {
+    padding: 24px 18px 50px;
+  }
+
+  .application-settings-account-card,
+  .application-settings-device-grid,
+  .application-settings-theme-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .application-settings-account-card {
+    justify-items: start;
+  }
+
+  .application-settings-row {
+    grid-template-columns: 1fr auto;
+  }
+}
+
 @media (max-width: 760px) {
   .voice-device-grid,
   .profile-editor-layout {
