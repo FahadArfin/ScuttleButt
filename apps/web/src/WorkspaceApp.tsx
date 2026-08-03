@@ -137,6 +137,7 @@ const FRIEND_CODE_STORAGE_KEY = 'scuttlebutt:friend-code';
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const PROFILE_STORAGE_KEY = 'scuttlebutt:profile:v2';
 const HIDDEN_MUTED_GROUPS_STORAGE_KEY = 'scuttlebutt:hidden-muted-groups:v1';
+const SHOW_SERVER_PROFILE_BANNER = false;
 
 interface UserProfile {
   avatar: string;
@@ -1203,10 +1204,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         />
 
         <aside
-          className={`workspace-sidebar ${activeSurface === 'groups' && activeGroup ? 'workspace-sidebar-group' : ''}`}
+          className={`workspace-sidebar ${activeSurface === 'groups' && activeGroup && SHOW_SERVER_PROFILE_BANNER ? 'workspace-sidebar-group' : ''}`}
           aria-label="Workspace navigation"
         >
-          {activeSurface === 'groups' && activeGroup ? (
+          {activeSurface === 'groups' && activeGroup && SHOW_SERVER_PROFILE_BANNER ? (
             <div
               className="group-server-banner group-server-banner-top"
               style={{ backgroundColor: serverSettingsFor(activeGroup).bannerColor }}
