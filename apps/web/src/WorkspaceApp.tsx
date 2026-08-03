@@ -1202,7 +1202,22 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
           onOpenGroup={openGroup}
         />
 
-        <aside className="workspace-sidebar" aria-label="Workspace navigation">
+        <aside
+          className={`workspace-sidebar ${activeSurface === 'groups' && activeGroup ? 'workspace-sidebar-group' : ''}`}
+          aria-label="Workspace navigation"
+        >
+          {activeSurface === 'groups' && activeGroup ? (
+            <div
+              className="group-server-banner group-server-banner-top"
+              style={{ backgroundColor: serverSettingsFor(activeGroup).bannerColor }}
+            >
+              <ServerProfileIcon className="group-server-banner-icon" group={activeGroup} />
+              <div>
+                <strong>{activeGroup.name}</strong>
+                <span>{activeGroup.description}</span>
+              </div>
+            </div>
+          ) : null}
           <header className="workspace-titlebar workspace-titlebar-interactive">
             <div>
               <strong>{activeSurface === 'dms' ? 'Direct Messages' : activeGroup?.name}</strong>
@@ -2180,16 +2195,6 @@ function GroupNavigation({
 
   return (
     <div className="group-channel-navigation" onContextMenu={handleContextMenu}>
-      <div
-        className="group-server-banner"
-        style={{ backgroundColor: serverSettingsFor(group).bannerColor }}
-      >
-        <ServerProfileIcon className="group-server-banner-icon" group={group} />
-        <div>
-          <strong>{group.name}</strong>
-          <span>{group.description}</span>
-        </div>
-      </div>
       <div className="community-heading">
         <div className="community-heading-title">
           <ServerProfileIcon className="community-heading-icon" group={group} />

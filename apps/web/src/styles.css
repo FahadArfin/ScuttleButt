@@ -226,6 +226,10 @@ img {
   background: var(--sidebar);
 }
 
+.workspace-sidebar-group {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+}
+
 .workspace-titlebar {
   display: flex;
   min-width: 0;
@@ -451,6 +455,27 @@ img {
   color: #f6f7fb;
 }
 
+.group-server-banner-top {
+  min-height: 128px;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0;
+  padding: 18px 18px 15px;
+  border-bottom-color: color-mix(in srgb, var(--server-banner-color) 52%, var(--line));
+}
+
+.group-server-banner-top .group-server-banner-icon {
+  width: 76px;
+  height: 76px;
+  border-width: 4px;
+  border-radius: 22px;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 28%);
+}
+
+.group-server-banner-top .group-server-banner-icon img {
+  transform: scale(1.08);
+}
+
 .group-server-banner-icon {
   width: 42px;
   height: 42px;
@@ -478,10 +503,18 @@ img {
   font-weight: 760;
 }
 
+.group-server-banner-top strong {
+  font-size: 1rem;
+}
+
 .group-server-banner span {
   margin-top: 3px;
   color: rgb(246 247 251 / 72%);
   font-size: 0.64rem;
+}
+
+.group-server-banner-top span {
+  font-size: 0.69rem;
 }
 
 .community-heading .community-heading-icon {
@@ -3771,6 +3804,17 @@ img {
   .app-window,
   .app-window.members-collapsed {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .group-server-banner-top {
+    min-height: 112px;
+    padding: 14px 14px 12px;
+  }
+
+  .group-server-banner-top .group-server-banner-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 19px;
   }
 
   .mobile-conversation-open .server-rail,

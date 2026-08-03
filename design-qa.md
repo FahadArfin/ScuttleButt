@@ -73,6 +73,43 @@ The reference contains Discord-specific avatar art, OS tray chrome, and account 
 
 final result: passed
 
+## Top server banner and enlarged profile icon QA
+
+### Comparison target
+
+- Source visual truth: `C:/Users/fahad/AppData/Local/Temp/codex-clipboard-23169fb2-af1c-4dd2-9cd2-e9a177da9550.png`
+- Desktop implementation screenshot: `C:/Users/fahad/AppData/Local/Temp/scuttlebutt-top-banner.png`
+- Mobile implementation screenshot: `C:/Users/fahad/AppData/Local/Temp/scuttlebutt-top-banner-mobile.png`
+- Implementation URL: `http://localhost:5173/`
+- Desktop state: reze group, general channel, server navigation visible.
+- Mobile state: group navigation visible at the responsive breakpoint.
+
+### Evidence and comparison
+
+- Source pixels: 638 x 377; desktop implementation pixels: 1280 x 720; mobile implementation pixels: 390 x 844. The source is a focused sidebar crop, while implementation captures include the full app viewport; the focused comparison region is the workspace sidebar.
+- The banner now occupies the first row of the group sidebar, above the workspace title and encrypted-server status. This directly addresses the requested top placement while preserving the server menu and status controls below it.
+- The actual saved server profile image is reused in the banner at 76 x 76 on desktop and 64 x 64 on mobile. Its image layer receives a restrained 1.08 scale so the profile feels more prominent without cropping the subject out of the rounded frame.
+- Typography uses the existing Inter system with a heavier server name and compact description. The banner's solid saved server color continues to drive the workspace theme and channel selection surfaces.
+- The mobile capture keeps the banner inside the single-column navigation view without overlap or clipping. The group title, encrypted status, channel list, and bottom user panel remain reachable.
+- Browser interaction checks completed after reload; the browser console reported no errors.
+
+### Findings
+
+No actionable P0, P1, or P2 findings remain.
+
+The supplied reference shows the previous banner position below the status row. The latest user instruction explicitly requested moving it to the very top, so that order change is intentional; the icon scale, banner treatment, spacing, copy hierarchy, and responsive behavior remain grounded in the supplied reference.
+
+### Implementation checklist
+
+- [x] Banner moved to the top of the group workspace sidebar.
+- [x] Server profile icon enlarged and gently zoomed inside the banner.
+- [x] Server name and description remain readable at desktop and mobile widths.
+- [x] Existing title/menu/status/channel interactions preserved.
+- [x] Desktop and mobile browser screenshots captured and compared with the supplied reference.
+- [x] Typecheck, lint, unit tests, production build, and console-error check completed.
+
+final result: passed
+
 ## Server banner theme and media picker QA
 
 ### Comparison targets
