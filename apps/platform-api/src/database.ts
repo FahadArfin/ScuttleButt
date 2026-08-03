@@ -701,7 +701,7 @@ export class ScuttlebuttDatabase {
            WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
           [messageId, userId, value],
         );
-        if (existing.rowCount > 0) {
+        if ((existing.rowCount ?? 0) > 0) {
           await client.query(
             `DELETE FROM synced_message_reactions
              WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
@@ -729,11 +729,12 @@ export class ScuttlebuttDatabase {
         );
         const nextReactionUsers: Record<string, Array<{ id: string; name: string }>> = {};
         for (const reaction of reactionRows.rows) {
-          nextReactionUsers[reaction.emoji] ??= [];
-          nextReactionUsers[reaction.emoji].push({
+          const users = nextReactionUsers[reaction.emoji] ?? [];
+          users.push({
             id: reaction.user_id,
             name: reaction.display_name,
           });
+          nextReactionUsers[reaction.emoji] = users;
         }
 
         const nextReactions = { ...currentReactions };
@@ -749,7 +750,7 @@ export class ScuttlebuttDatabase {
           else delete nextReactions[emoji];
         }
 
-        const next = { ...current, reactions: nextReactions };
+        const next: Record<string, unknown> = { ...current, reactions: nextReactions };
         if (Object.keys(nextReactionUsers).length > 0) {
           next.reactionUsers = nextReactionUsers;
         } else {
