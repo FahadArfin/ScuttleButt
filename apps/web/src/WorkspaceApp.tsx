@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -86,6 +87,7 @@ import {
   conversationForChannel,
   loadStoredDms,
   loadStoredGroups,
+  serverSettingsFor,
   slugify,
   createDefaultServerSettings,
   type AppSurface,
@@ -202,6 +204,32 @@ function groupIcon(icon: WorkspaceGroup['icon']): ReactNode {
   if (icon === 'garden') return <Leaf size={24} weight="duotone" />;
   if (icon === 'summit') return <Mountains size={24} weight="duotone" />;
   return <ChatCenteredDots size={24} weight="duotone" />;
+}
+
+type ServerThemeStyle = CSSProperties & {
+  '--server-banner-color'?: string;
+};
+
+function serverThemeStyle(group?: WorkspaceGroup): ServerThemeStyle {
+  return group ? { '--server-banner-color': serverSettingsFor(group).bannerColor } : {};
+}
+
+function ServerProfileIcon({
+  className = '',
+  group,
+}: {
+  className?: string;
+  group: WorkspaceGroup;
+}) {
+  const settings = serverSettingsFor(group);
+  return (
+    <span
+      className={`server-profile-icon ${className}`}
+      style={{ backgroundColor: settings.bannerColor }}
+    >
+      {settings.iconUrl ? <img src={settings.iconUrl} alt="" /> : groupIcon(group.icon)}
+    </span>
+  );
 }
 
 function PresenceIcon({ status, size = 16 }: { status: PresenceStatus; size?: number }) {
@@ -900,7 +928,8 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   return (
     <main className="app-shell" data-testid={E2E_SELECTORS.appShell}>
       <section
-        className={`app-window ${showMembers ? '' : 'members-collapsed'} ${mobileNavigationOpen ? 'mobile-navigation-open' : 'mobile-conversation-open'}`}
+        className={`app-window ${activeSurface === 'groups' && activeGroup ? 'server-profile-themed' : ''} ${showMembers ? '' : 'members-collapsed'} ${mobileNavigationOpen ? 'mobile-navigation-open' : 'mobile-conversation-open'}`}
+        style={serverThemeStyle(activeSurface === 'groups' ? activeGroup : undefined)}
       >
         <ServerRail
           activeGroupId={activeGroupId}
@@ -1561,9 +1590,10 @@ function ServerRail({
           aria-label={`${group.name} group`}
           title={group.name}
           key={group.id}
+          style={serverThemeStyle(group)}
           onClick={() => onOpenGroup(group.id)}
         >
-          {groupIcon(group.icon)}
+          <ServerProfileIcon group={group} />
         </button>
       ))}
       <button
@@ -1693,7 +1723,8 @@ function GroupNavigation({
   return (
     <>
       <div className="community-heading">
-        <span>{group.name}</span>
+        <ServerProfileIcon className="community-heading-icon" group={group} />
+        <span className="community-heading-name">{group.name}</span>
         <CaretDown size={14} />
         {canManage ? (
           <button type="button" aria-label="Server settings" onClick={onSettings}>
@@ -2339,7 +2370,9 @@ function LandingPanel({
                 key={group.id}
                 onClick={() => onOpenGroup(group.id)}
               >
-                <span className="landing-card-icon">{groupIcon(group.icon)}</span>
+                <span className="landing-card-icon">
+                  <ServerProfileIcon className="landing-server-profile-icon" group={group} />
+                </span>
                 <strong>{group.name}</strong>
                 <span>{group.description}</span>
                 <small>{group.channels.length} channels</small>

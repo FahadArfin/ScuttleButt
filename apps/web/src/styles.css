@@ -143,6 +143,26 @@ img {
   transition: 150ms ease;
 }
 
+.server-profile-icon {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border-radius: inherit;
+  color: #dce3ff;
+}
+
+.server-profile-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.server-mark .server-profile-icon {
+  pointer-events: none;
+}
+
 .server-mark:hover {
   color: #eef2fb;
   border-radius: 14px;
@@ -154,13 +174,17 @@ img {
   background: #263252;
 }
 
+.server-mark-active[style] {
+  background: color-mix(in srgb, var(--server-banner-color) 30%, #263252);
+}
+
 .server-mark-active::before {
   position: absolute;
   left: -12px;
   width: 4px;
   height: 28px;
   border-radius: 0 4px 4px 0;
-  background: var(--accent);
+  background: var(--server-banner-color, var(--accent));
   content: '';
 }
 
@@ -234,6 +258,20 @@ img {
   font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.server-profile-themed .workspace-titlebar {
+  border-bottom-color: color-mix(in srgb, var(--server-banner-color) 46%, var(--line));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--server-banner-color) 24%, #151b25),
+    #151b25 78%
+  );
+}
+
+.server-profile-themed .workspace-trust-row {
+  border-color: color-mix(in srgb, var(--server-banner-color) 42%, var(--line));
+  background: color-mix(in srgb, var(--server-banner-color) 10%, #171e29);
 }
 
 .workspace-trust-row {
@@ -351,6 +389,24 @@ img {
   color: #a7b0c0;
 }
 
+.community-heading .community-heading-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  margin-right: 8px;
+  border-radius: 7px;
+}
+
+.community-heading .community-heading-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.server-profile-themed .community-heading {
+  border-top-color: color-mix(in srgb, var(--server-banner-color) 34%, var(--line-soft));
+  border-bottom-color: color-mix(in srgb, var(--server-banner-color) 34%, var(--line-soft));
+}
+
 .community-heading svg {
   margin-right: 6px;
 }
@@ -435,6 +491,10 @@ img {
 .channel-button-active {
   color: #eef1fb;
   background: #2a355c;
+}
+
+.server-profile-themed .channel-button-active {
+  background: color-mix(in srgb, var(--server-banner-color) 36%, #2a355c);
 }
 
 .channel-button span:nth-child(2) {
@@ -2053,6 +2113,12 @@ img {
   align-items: center;
   color: var(--accent);
   display: inline-flex;
+}
+
+.landing-card-icon .landing-server-profile-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
 }
 
 .landing-card-create {
