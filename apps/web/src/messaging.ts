@@ -56,6 +56,7 @@ export interface Message {
   senderInitials: string;
   body: string;
   sentAt: string;
+  createdAt?: string;
   status: MessageStatus;
   edited: boolean;
   own: boolean;
@@ -64,6 +65,23 @@ export interface Message {
   attachments: AttachmentDraft[];
   reactions: Record<string, number>;
   reactionUsers?: Record<string, ReactionUser[]>;
+}
+
+export const MESSAGE_GROUP_WINDOW_MS = 10 * 60 * 1000;
+
+export function shouldGroupMessage(
+  previous: Message | undefined,
+  current: Message,
+  windowMs = MESSAGE_GROUP_WINDOW_MS,
+): boolean {
+  if (!previous || previous.senderId !== current.senderId) return false;
+
+  const previousTime = Date.parse(previous.createdAt ?? '');
+  const currentTime = Date.parse(current.createdAt ?? '');
+  if (!Number.isFinite(previousTime) || !Number.isFinite(currentTime)) return false;
+
+  const gap = currentTime - previousTime;
+  return gap >= 0 && gap <= windowMs;
 }
 
 export interface SendMessageOptions {
@@ -362,6 +380,7 @@ export function createDemoMessagingRepository(user?: {
         senderInitials: currentUser.initials,
         body,
         sentAt: 'Just now',
+        createdAt: new Date().toISOString(),
         status: 'sent',
         edited: false,
         own: true,
@@ -515,6 +534,7 @@ export function createSyncedMessagingRepository(
         senderInitials: initials,
         body,
         sentAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        createdAt: new Date().toISOString(),
         status: 'sent',
         edited: false,
         own: true,

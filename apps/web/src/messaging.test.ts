@@ -1,10 +1,34 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createDemoMessagingRepository, createSyncedMessagingRepository } from './messaging.js';
+import {
+  createDemoMessagingRepository,
+  createSyncedMessagingRepository,
+  shouldGroupMessage,
+} from './messaging.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('local messaging repository', () => {
+  it('groups consecutive messages from the same sender for ten minutes', () => {
+    const previous = {
+      senderId: 'user-1',
+      createdAt: '2026-08-04T00:00:00.000Z',
+    } as Parameters<typeof shouldGroupMessage>[0];
+    const withinWindow = {
+      senderId: 'user-1',
+      createdAt: '2026-08-04T00:10:00.000Z',
+    } as Parameters<typeof shouldGroupMessage>[1];
+    const afterWindow = {
+      senderId: 'user-1',
+      createdAt: '2026-08-04T00:10:01.000Z',
+    } as Parameters<typeof shouldGroupMessage>[1];
+    const differentSender = { ...withinWindow, senderId: 'user-2' };
+
+    expect(shouldGroupMessage(previous, withinWindow)).toBe(true);
+    expect(shouldGroupMessage(previous, afterWindow)).toBe(false);
+    expect(shouldGroupMessage(previous, differentSender)).toBe(false);
+  });
+
   it('creates a conversation that can immediately receive messages', async () => {
     const repository = createDemoMessagingRepository();
     await repository.createConversation({

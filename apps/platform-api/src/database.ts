@@ -1107,17 +1107,22 @@ export class ScuttlebuttDatabase {
   async listMessages(userId: string, conversationId: string): Promise<unknown[]> {
     const result = await this.pool.query<{
       avatar_url: string | null;
+      created_at: Date;
       message: Record<string, unknown>;
     }>(
-      `SELECT sm.message, sender.avatar_url FROM synced_messages sm
+      `SELECT sm.message, sm.created_at, sender.avatar_url FROM synced_messages sm
        JOIN synced_conversation_members m ON m.conversation_id = sm.conversation_id
        JOIN users sender ON sender.id = sm.sender_id
        WHERE sm.conversation_id = $1 AND m.user_id = $2
        ORDER BY sm.created_at`,
       [conversationId, userId],
     );
-    return result.rows.map(({ avatar_url, message }) => ({
+    return result.rows.map(({ avatar_url, created_at, message }) => ({
       ...message,
+      createdAt:
+        typeof message.createdAt === 'string' && message.createdAt
+          ? message.createdAt
+          : created_at.toISOString(),
       senderAvatar: avatar_url ?? undefined,
     }));
   }

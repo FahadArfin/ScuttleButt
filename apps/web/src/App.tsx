@@ -50,6 +50,7 @@ import { E2E_SELECTORS } from '@scuttlebutt/testing';
 import { DEMO_COMMUNITY } from './community.js';
 import {
   createDemoMessagingRepository,
+  shouldGroupMessage,
   type AttachmentDraft,
   type Conversation,
   type Message,
@@ -250,6 +251,7 @@ export function PersonAvatar({
 
 export function MessageRow({
   avatar,
+  compact = false,
   emotes = [],
   message,
   onDelete,
@@ -259,6 +261,7 @@ export function MessageRow({
   onRetry,
 }: {
   avatar?: string;
+  compact?: boolean;
   emotes?: RenderableEmote[];
   message: Message;
   onDelete: (message: Message) => void;
@@ -320,21 +323,29 @@ export function MessageRow({
 
   return (
     <article
-      className={`message-row ${message.own ? 'message-row-own' : ''}`}
+      className={`message-row ${message.own ? 'message-row-own' : ''} ${compact ? 'message-row-compact' : ''}`}
       data-testid={E2E_SELECTORS.message}
       data-message-id={message.id}
     >
-      <PersonAvatar
-        image={message.own && avatar ? avatar : (message.senderAvatar ?? avatarForMessage(message))}
-        name={message.senderName}
-        status="online"
-      />
+      {compact ? (
+        <span className="message-avatar-spacer" aria-hidden="true" />
+      ) : (
+        <PersonAvatar
+          image={
+            message.own && avatar ? avatar : (message.senderAvatar ?? avatarForMessage(message))
+          }
+          name={message.senderName}
+          status="online"
+        />
+      )}
       <div className="message-content">
-        <div className="message-heading">
-          <strong>{message.senderName}</strong>
-          <time>{message.sentAt}</time>
-          {message.edited ? <span className="message-edited">edited</span> : null}
-        </div>
+        {!compact ? (
+          <div className="message-heading">
+            <strong>{message.senderName}</strong>
+            <time>{message.sentAt}</time>
+            {message.edited ? <span className="message-edited">edited</span> : null}
+          </div>
+        ) : null}
         {message.replyTo ? (
           <div className="reply-snippet" aria-label={`Replying to ${message.replyTo.author}`}>
             <strong>{message.replyTo.author}</strong>
@@ -1024,8 +1035,11 @@ export function App({ repository: repositoryProp }: AppProps = {}) {
                       <span>Today</span>
                     </div>
                   ) : null}
-                  {filteredMessages.map((message) => (
+                  {filteredMessages.map((message, index) => (
                     <MessageRow
+                      compact={
+                        !search.trim() && shouldGroupMessage(filteredMessages[index - 1], message)
+                      }
                       key={message.id}
                       message={message}
                       onDelete={(nextMessage) => void handleDelete(nextMessage)}

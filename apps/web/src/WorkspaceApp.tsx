@@ -99,6 +99,7 @@ import {
   createSyncedMessagingRepository,
   loadSyncedWorkspace,
   saveSyncedWorkspace,
+  shouldGroupMessage,
   type AttachmentDraft,
   type Conversation,
   type Message,
@@ -3925,9 +3926,10 @@ function MessageList({
           <span>Today</span>
         </div>
       ) : null}
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <MessageRow
           avatar={ownAvatar}
+          compact={shouldGroupMessage(messages[index - 1], message)}
           emotes={emotes}
           key={message.id}
           message={message}
