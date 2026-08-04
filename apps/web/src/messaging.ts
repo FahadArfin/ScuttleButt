@@ -1,5 +1,7 @@
 import type { CommunityChannelKind } from '@scuttlebutt/community';
 
+import type { MentionReference } from './mentions.js';
+
 export type ConversationKind = 'channel' | 'direct';
 export type MessageStatus = 'failed' | 'sending' | 'sent';
 
@@ -57,6 +59,7 @@ export interface Message {
   status: MessageStatus;
   edited: boolean;
   own: boolean;
+  mentions?: MentionReference[];
   replyTo?: ReplyReference;
   attachments: AttachmentDraft[];
   reactions: Record<string, number>;
@@ -64,6 +67,7 @@ export interface Message {
 }
 
 export interface SendMessageOptions {
+  mentions?: MentionReference[];
   replyTo?: ReplyReference;
   attachments?: AttachmentDraft[];
 }
@@ -302,6 +306,7 @@ function cloneMessage(message: Message): Message {
     ...message,
     attachments: [...message.attachments],
     reactions: { ...message.reactions },
+    mentions: message.mentions ? message.mentions.map((mention) => ({ ...mention })) : undefined,
     reactionUsers: message.reactionUsers
       ? Object.fromEntries(
           Object.entries(message.reactionUsers).map(([emoji, users]) => [
@@ -360,6 +365,7 @@ export function createDemoMessagingRepository(user?: {
         status: 'sent',
         edited: false,
         own: true,
+        mentions: options.mentions ? [...options.mentions] : undefined,
         replyTo: options.replyTo,
         attachments: options.attachments ? [...options.attachments] : [],
         reactions: {},
@@ -512,6 +518,7 @@ export function createSyncedMessagingRepository(
         status: 'sent',
         edited: false,
         own: true,
+        mentions: options.mentions ? [...options.mentions] : undefined,
         replyTo: options.replyTo,
         attachments: options.attachments ? [...options.attachments] : [],
         reactions: {},

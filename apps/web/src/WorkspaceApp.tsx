@@ -77,6 +77,12 @@ import {
   type SignedInUser,
 } from './auth.js';
 import { optimizeAvatar } from './image-utils.js';
+import {
+  extractMentions,
+  filterMentionCandidates,
+  mentionDraftAt,
+  type MentionCandidate,
+} from './mentions.js';
 import { disablePushNotifications, syncPushNotifications } from './push-notifications.js';
 import { MediaPicker, type MediaAsset } from './media-picker.js';
 import {
@@ -669,6 +675,39 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     profile.presence,
     user.id,
   ]);
+  const mentionCandidates = useMemo<MentionCandidate[]>(() => {
+    const localCandidate: MentionCandidate = {
+      avatar: profile.avatar,
+      id: user.id,
+      name: profile.displayName,
+      note: 'You',
+      status: publicPresenceStatus(profile.presence),
+    };
+    const candidates =
+      activeSurface === 'groups'
+        ? members
+        : [
+            localCandidate,
+            ...friendState.friends.map((friend) => ({
+              avatar: friend.avatarUrl,
+              id: friend.id,
+              name: friend.name,
+              note: 'Friend',
+              status: friend.presence,
+            })),
+          ];
+    return Array.from(
+      new Map(candidates.map((candidate) => [candidate.id, { ...candidate }])).values(),
+    );
+  }, [
+    activeSurface,
+    friendState.friends,
+    members,
+    profile.avatar,
+    profile.displayName,
+    profile.presence,
+    user.id,
+  ]);
   const availableSounds = useMemo(() => groups.flatMap(({ sounds = [] }) => sounds), [groups]);
   const availableEmotes = useMemo(() => groups.flatMap(({ emotes = [] }) => emotes), [groups]);
   const joinedVoice = groups
@@ -999,6 +1038,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       } else {
         await repository.sendMessage(selectedConversationId, composer.trim(), {
           attachments,
+          mentions: extractMentions(composer.trim(), mentionCandidates),
           replyTo,
         });
       }
@@ -2119,6 +2159,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                     isSending={isSending}
                     replyTo={replyTo}
                     emotes={availableEmotes}
+                    mentionCandidates={mentionCandidates}
                     onCancelContext={() => {
                       setEditingMessage(undefined);
                       setReplyTo(undefined);
@@ -2167,6 +2208,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
               composer={composer}
               editingMessage={editingMessage}
               emotes={availableEmotes}
+              mentionCandidates={mentionCandidates}
               isLoading={isLoading}
               isSending={isSending}
               messages={filteredMessages}
@@ -3905,6 +3947,7 @@ function Composer({
   composer,
   editingMessage,
   emotes,
+  mentionCandidates,
   isLoading,
   isSending,
   onCancelContext,
@@ -3923,6 +3966,7 @@ function Composer({
   composer: string;
   editingMessage?: Message;
   emotes: CustomEmote[];
+  mentionCandidates: MentionCandidate[];
   isLoading: boolean;
   isSending: boolean;
   onCancelContext: () => void;
@@ -3937,6 +3981,78 @@ function Composer({
   replyTo?: ReplyReference;
 }) {
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [mentionDraft, setMentionDraft] = useState<ReturnType<typeof mentionDraftAt>>();
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const matchingMentionCandidates = useMemo(
+    () => (mentionDraft ? filterMentionCandidates(mentionCandidates, mentionDraft.query) : []),
+    [mentionCandidates, mentionDraft],
+  );
+
+  const syncMentionDraft = (value: string, cursor: number) => {
+    const nextDraft = mentionDraftAt(value, cursor);
+    setMentionDraft(nextDraft);
+    setMentionIndex(0);
+  };
+
+  const selectMention = (candidate: MentionCandidate) => {
+    if (!mentionDraft) return;
+    const replacement = `@${candidate.name} `;
+    const nextValue =
+      composer.slice(0, mentionDraft.start) + replacement + composer.slice(mentionDraft.end);
+    const nextCursor = mentionDraft.start + replacement.length;
+    onChange(nextValue);
+    setMentionDraft(undefined);
+    setMentionIndex(0);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionDraft && matchingMentionCandidates.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setMentionIndex((current) => (current + 1) % matchingMentionCandidates.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setMentionIndex(
+          (current) =>
+            (current - 1 + matchingMentionCandidates.length) % matchingMentionCandidates.length,
+        );
+        return;
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        const candidate = matchingMentionCandidates[mentionIndex];
+        if (candidate) selectMention(candidate);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMentionDraft(undefined);
+        return;
+      }
+    }
+    onKeyDown(event);
+  };
+
+  const handleMentionButton = () => {
+    const separator = composer && !/\s$/.test(composer) ? ' ' : '';
+    const nextValue = `${composer}${separator}@`;
+    onChange(nextValue);
+    syncMentionDraft(nextValue, nextValue.length);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const handleInputKeyUp = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(event.key)) return;
+    syncMentionDraft(event.currentTarget.value, event.currentTarget.selectionStart);
+  };
+
   return (
     <form className="composer-shell" data-testid={E2E_SELECTORS.composer} onSubmit={onSubmit}>
       {editingMessage || replyTo ? (
@@ -3970,14 +4086,56 @@ function Composer({
         <span className="visually-hidden">Write a message</span>
         <textarea
           id="message-composer-input"
+          ref={inputRef}
           value={composer}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={(event) => {
+            onChange(event.target.value);
+            syncMentionDraft(event.target.value, event.target.selectionStart);
+          }}
+          onClick={(event) =>
+            syncMentionDraft(event.currentTarget.value, event.currentTarget.selectionStart)
+          }
+          onKeyDown={handleInputKeyDown}
+          onKeyUp={handleInputKeyUp}
           placeholder={`Message ${activeChannelName}`}
           rows={1}
           disabled={isLoading}
         />
       </label>
+      {mentionDraft && mentionCandidates.length > 0 ? (
+        <div className="mention-picker" role="listbox" aria-label="Mention a member">
+          <div className="mention-picker-heading">
+            <strong>Members</strong>
+            <span>Enter to mention</span>
+          </div>
+          {matchingMentionCandidates.length > 0 ? (
+            matchingMentionCandidates.map((candidate, index) => (
+              <button
+                type="button"
+                className={`mention-picker-option ${index === mentionIndex ? 'mention-picker-option-active' : ''}`}
+                key={candidate.id}
+                role="option"
+                aria-selected={index === mentionIndex}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectMention(candidate)}
+              >
+                <PersonAvatar
+                  image={candidate.avatar}
+                  name={candidate.name}
+                  status={candidate.status}
+                  size="small"
+                />
+                <span>
+                  <strong>{candidate.name}</strong>
+                  <small>{candidate.note ?? 'Member'}</small>
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="mention-picker-empty">No members match “{mentionDraft.query}”.</p>
+          )}
+        </div>
+      ) : null}
       <div className="composer-footer">
         <div className="composer-tools">
           <label className="composer-tool" title="Attach files">
@@ -3997,7 +4155,7 @@ function Composer({
             type="button"
             className="composer-tool"
             aria-label="Mention someone"
-            onClick={() => onInsert('@Maya')}
+            onClick={handleMentionButton}
           >
             <strong>@</strong>
           </button>
@@ -4785,6 +4943,7 @@ function VoiceChatSidebar({
   composer,
   editingMessage,
   emotes,
+  mentionCandidates,
   isLoading,
   isSending,
   messages,
@@ -4811,6 +4970,7 @@ function VoiceChatSidebar({
   composer: string;
   editingMessage?: Message;
   emotes: CustomEmote[];
+  mentionCandidates: MentionCandidate[];
   isLoading: boolean;
   isSending: boolean;
   messages: Message[];
@@ -4865,6 +5025,7 @@ function VoiceChatSidebar({
         composer={composer}
         editingMessage={editingMessage}
         emotes={emotes}
+        mentionCandidates={mentionCandidates}
         isLoading={isLoading}
         isSending={isSending}
         replyTo={replyTo}

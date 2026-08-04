@@ -58,6 +58,7 @@ interface ConversationRequestBody extends GoogleCredentialBody {
 interface PersistedMessageBody {
   body?: string;
   id: string;
+  mentions?: unknown;
   replyTo?: unknown;
   senderId?: string;
   senderName?: string;

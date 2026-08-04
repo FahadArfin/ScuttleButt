@@ -56,6 +56,7 @@ import {
   type MessagingRepository,
   type ReplyReference,
 } from './messaging.js';
+import { mentionPattern, type MentionReference } from './mentions.js';
 import type { PresenceIndicatorStatus } from './presence.js';
 import { VoicePreviewPanel } from './voice-preview.js';
 import { MediaPicker, type MediaAsset } from './media-picker.js';
@@ -149,6 +150,53 @@ function reactionValueForAsset(asset: MediaAsset): string | undefined {
   return `media:${asset.kind}:${encodeURIComponent(asset.url)}:${encodeURIComponent(asset.previewUrl ?? asset.url)}`;
 }
 
+function renderTextWithMentions(value: string, mentions: MentionReference[]): ReactNode {
+  const pattern = mentionPattern(mentions);
+  if (!pattern) return value;
+  const mentionIds = new Map(mentions.map(({ id, name }) => [name.trim().toLocaleLowerCase(), id]));
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(value))) {
+    const leading = match[1] ?? '';
+    const mentionText = match[2] ?? '';
+    const mentionStart = match.index + leading.length;
+    if (mentionStart > lastIndex) {
+      nodes.push(value.slice(lastIndex, mentionStart));
+    }
+    const mentionName = mentionText.slice(1).toLocaleLowerCase();
+    nodes.push(
+      <span
+        className="message-mention"
+        data-user-id={mentionIds.get(mentionName)}
+        key={`${mentionText}-${mentionStart}`}
+        title={`Mentioned ${mentionText.slice(1)}`}
+      >
+        {mentionText}
+      </span>,
+    );
+    lastIndex = mentionStart + mentionText.length;
+  }
+  if (lastIndex < value.length) nodes.push(value.slice(lastIndex));
+  return nodes;
+}
+
+function renderMessageBody(body: string, emotes: RenderableEmote[], mentions: MentionReference[]) {
+  return (body || ' ').split(/(:[a-z0-9_-]+:)/gi).map((part, index) => {
+    const emote = emotes.find(({ name }) => `:${name}:`.toLowerCase() === part.toLowerCase());
+    return emote ? (
+      <img
+        className="message-custom-emote"
+        src={emote.dataUrl}
+        alt={`:${emote.name}:`}
+        key={`${emote.id}-${index}`}
+      />
+    ) : (
+      <span key={`${part}-${index}`}>{renderTextWithMentions(part, mentions)}</span>
+    );
+  });
+}
+
 function IconButton({
   children,
   label,
@@ -232,10 +280,7 @@ export function MessageRow({
     if (!anchor) return;
     const gutter = 12;
     const gap = 8;
-    const left = Math.max(
-      gutter,
-      Math.min(anchor.left, window.innerWidth - width - gutter),
-    );
+    const left = Math.max(gutter, Math.min(anchor.left, window.innerWidth - width - gutter));
     const above = anchor.top - height - gap;
     const below = anchor.bottom + gap;
     const top =
@@ -297,21 +342,7 @@ export function MessageRow({
           </div>
         ) : null}
         <p className="message-body">
-          {(message.body || ' ').split(/(:[a-z0-9_-]+:)/gi).map((part, index) => {
-            const emote = emotes.find(
-              ({ name }) => `:${name}:`.toLowerCase() === part.toLowerCase(),
-            );
-            return emote ? (
-              <img
-                className="message-custom-emote"
-                src={emote.dataUrl}
-                alt={`:${emote.name}:`}
-                key={`${emote.id}-${index}`}
-              />
-            ) : (
-              <span key={`${part}-${index}`}>{part}</span>
-            );
-          })}
+          {renderMessageBody(message.body, emotes, message.mentions ?? [])}
         </p>
         {message.attachments.length > 0 ? (
           <div className="message-attachments" aria-label="Message attachments">
@@ -421,7 +452,7 @@ export function MessageRow({
           ) : null}
         </div>
         <div className="reaction-list" aria-label="Message reactions">
-          {Object.entries(message.reactions).map(([emoji, count]) => (
+          {Object.entries(message.reactions).map(([emoji, count]) =>
             (() => {
               const reactors = message.reactionUsers?.[emoji] ?? [];
               const reactorNames = reactors.map(({ name }) => name).filter(Boolean);
@@ -454,8 +485,8 @@ export function MessageRow({
                   <span>{count}</span>
                 </button>
               );
-            })()
-          ))}
+            })(),
+          )}
         </div>
         {message.status === 'failed' ? (
           <div className="message-failure" role="alert">

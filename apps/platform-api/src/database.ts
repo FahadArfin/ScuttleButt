@@ -775,7 +775,17 @@ export class ScuttlebuttDatabase {
         );
         const hasDirectActivity = unread.some(({ message }) => {
           const body = typeof message.body === 'string' ? message.body.toLowerCase() : '';
-          const mentioned = displayName ? body.includes(`@${displayName}`) : false;
+          const explicitlyMentioned = Array.isArray(message.mentions)
+            ? message.mentions.some(
+                (mention) =>
+                  Boolean(mention) &&
+                  typeof mention === 'object' &&
+                  'id' in mention &&
+                  (mention as { id?: unknown }).id === userId,
+              )
+            : false;
+          const mentioned =
+            explicitlyMentioned || (displayName ? body.includes(`@${displayName}`) : false);
           const replyTo = message.replyTo;
           const replyId =
             replyTo &&
@@ -857,7 +867,13 @@ export class ScuttlebuttDatabase {
   async getMessagePushTargets(
     senderId: string,
     conversationId: string,
-    message: { body?: unknown; replyTo?: unknown; senderName?: unknown; id: string },
+    message: {
+      body?: unknown;
+      id: string;
+      mentions?: unknown;
+      replyTo?: unknown;
+      senderName?: unknown;
+    },
   ): Promise<MessagePushTarget[]> {
     const conversationResult = await this.pool.query<{
       conversation: Record<string, unknown>;
@@ -879,9 +895,25 @@ export class ScuttlebuttDatabase {
 
     const reasons = new Map<string, 'mention' | 'reply'>();
     const body = typeof message.body === 'string' ? message.body.toLowerCase() : '';
+    const explicitlyMentionedUserIds = new Set<string>();
+    if (Array.isArray(message.mentions)) {
+      for (const mention of message.mentions) {
+        if (
+          mention &&
+          typeof mention === 'object' &&
+          'id' in mention &&
+          typeof (mention as { id?: unknown }).id === 'string'
+        ) {
+          explicitlyMentionedUserIds.add((mention as { id: string }).id);
+        }
+      }
+    }
     for (const member of members.rows) {
       const displayName = member.display_name.trim().toLowerCase();
-      if (displayName && body.includes(`@${displayName}`)) {
+      if (
+        explicitlyMentionedUserIds.has(member.user_id) ||
+        (displayName && body.includes(`@${displayName}`))
+      ) {
         reasons.set(member.user_id, 'mention');
       }
     }
