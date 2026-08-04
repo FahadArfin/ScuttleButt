@@ -28,6 +28,11 @@ import {
 
 import { PersonAvatar } from './App.js';
 import type { SignedInUser } from './auth.js';
+import {
+  enablePushNotifications,
+  getPushPermissionState,
+  type PushPermissionState,
+} from './push-notifications.js';
 import type { UserProfile } from './WorkspaceApp.js';
 
 export type ApplicationSettingsSection =
@@ -272,6 +277,7 @@ function RadioChoice({
 }
 
 export function ApplicationSettingsDialog({
+  credential,
   onChange,
   onClose,
   onEditProfile,
@@ -280,6 +286,7 @@ export function ApplicationSettingsDialog({
   profile,
   user,
 }: {
+  credential: string | null;
   onChange: (preferences: ApplicationPreferences) => void;
   onClose: () => void;
   onEditProfile: () => void;
@@ -448,7 +455,11 @@ export function ApplicationSettingsDialog({
               <MessagingSettings preferences={preferences} onChange={update} />
             ) : null}
             {activeSection === 'notifications' ? (
-              <NotificationsSettings preferences={preferences} onChange={update} />
+              <NotificationsSettings
+                credential={credential}
+                preferences={preferences}
+                onChange={update}
+              />
             ) : null}
             {activeSection === 'voice' ? (
               <VoiceAndVideoSettings
@@ -711,15 +722,44 @@ function MessagingSettings({
 }
 
 function NotificationsSettings({
+  credential,
   onChange,
   preferences,
 }: {
+  credential: string | null;
   onChange: <Key extends keyof ApplicationPreferences>(
     key: Key,
     value: ApplicationPreferences[Key],
   ) => void;
   preferences: ApplicationPreferences;
 }) {
+  const [pushPermission, setPushPermission] = useState<PushPermissionState>(() =>
+    getPushPermissionState(),
+  );
+  const [pushState, setPushState] = useState<'idle' | 'enabling' | 'enabled' | 'error'>('idle');
+  const [pushError, setPushError] = useState('');
+
+  useEffect(() => {
+    setPushPermission(getPushPermissionState());
+  }, []);
+
+  const handlePushEnable = async () => {
+    if (!credential) return;
+    setPushState('enabling');
+    setPushError('');
+    try {
+      await enablePushNotifications(credential);
+      setPushPermission(getPushPermissionState());
+      setPushState('enabled');
+    } catch (error) {
+      setPushState('error');
+      setPushPermission(getPushPermissionState());
+      setPushError(
+        error instanceof Error ? error.message : 'Push notifications could not be enabled.',
+      );
+    }
+  };
+
   return (
     <>
       <SettingsHeader
@@ -729,8 +769,36 @@ function NotificationsSettings({
       />
       <section className="application-settings-section">
         <SettingRow
+          title="Phone notifications"
+          description="Receive @mentions and replies in Notification Center, even when Scuttlebutt is closed."
+        >
+          {credential ? (
+            <button
+              type="button"
+              className="application-settings-button primary"
+              disabled={pushState === 'enabling' || pushPermission === 'denied'}
+              onClick={() => void handlePushEnable()}
+            >
+              {pushState === 'enabling'
+                ? 'Enabling…'
+                : pushPermission === 'granted' || pushState === 'enabled'
+                  ? 'Enabled'
+                  : pushPermission === 'denied'
+                    ? 'Blocked in browser'
+                    : 'Enable notifications'}
+            </button>
+          ) : (
+            <span className="application-settings-value">Sign in to enable</span>
+          )}
+        </SettingRow>
+        {pushState === 'error' ? (
+          <p className="application-settings-muted" role="alert">
+            {pushError}
+          </p>
+        ) : null}
+        <SettingRow
           title="Enable desktop notifications"
-          description="Show a notification when you receive a message or friend request."
+          description="Show notification indicators inside Scuttlebutt. Phone push is managed above."
         >
           <Toggle
             checked={preferences.notificationsEnabled}

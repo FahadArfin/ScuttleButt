@@ -50,6 +50,26 @@ export interface FriendState {
   outgoing: FriendProfile[];
 }
 
+export interface PushSubscriptionInput {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys: {
+    auth: string;
+    p256dh: string;
+  };
+}
+
+export interface MessagePushTarget {
+  auth: string;
+  body: string;
+  endpoint: string;
+  p256dh: string;
+  reason: 'mention' | 'reply';
+  tag: string;
+  title: string;
+  url: string;
+}
+
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export class ScuttlebuttDatabase {
@@ -204,6 +224,17 @@ export class ScuttlebuttDatabase {
       );
       CREATE INDEX IF NOT EXISTS synced_message_reactions_message_idx
         ON synced_message_reactions(message_id, emoji);
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        endpoint text PRIMARY KEY,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        p256dh text NOT NULL,
+        auth text NOT NULL,
+        expiration_time bigint,
+        user_agent text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
     `);
   }
 
@@ -690,6 +721,137 @@ export class ScuttlebuttDatabase {
        DO UPDATE SET last_read_at = EXCLUDED.last_read_at`,
       [conversationId, userId, latest.rows[0]?.last_read_at ?? new Date()],
     );
+  }
+
+  async upsertPushSubscription(
+    userId: string,
+    subscription: PushSubscriptionInput,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO push_subscriptions
+         (endpoint, user_id, p256dh, auth, expiration_time, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (endpoint) DO UPDATE SET
+         user_id = EXCLUDED.user_id,
+         p256dh = EXCLUDED.p256dh,
+         auth = EXCLUDED.auth,
+         expiration_time = EXCLUDED.expiration_time,
+         user_agent = EXCLUDED.user_agent,
+         updated_at = now()`,
+      [
+        subscription.endpoint,
+        userId,
+        subscription.keys.p256dh,
+        subscription.keys.auth,
+        subscription.expirationTime ?? null,
+        userAgent?.slice(0, 512) ?? null,
+      ],
+    );
+  }
+
+  async removePushSubscription(userId: string, endpoint: string): Promise<void> {
+    await this.pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [
+      endpoint,
+      userId,
+    ]);
+  }
+
+  async removePushSubscriptionByEndpoint(endpoint: string): Promise<void> {
+    await this.pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+  }
+
+  async getMessagePushTargets(
+    senderId: string,
+    conversationId: string,
+    message: { body?: unknown; replyTo?: unknown; senderName?: unknown; id: string },
+  ): Promise<MessagePushTarget[]> {
+    const conversationResult = await this.pool.query<{
+      conversation: Record<string, unknown>;
+    }>('SELECT conversation FROM synced_conversations WHERE id = $1', [conversationId]);
+    const conversation = conversationResult.rows[0]?.conversation;
+    if (!conversation) return [];
+
+    const members = await this.pool.query<{
+      display_name: string;
+      user_id: string;
+    }>(
+      `SELECT scm.user_id, u.display_name
+       FROM synced_conversation_members scm
+       JOIN users u ON u.id = scm.user_id
+       WHERE scm.conversation_id = $1 AND scm.user_id <> $2`,
+      [conversationId, senderId],
+    );
+    if (members.rows.length === 0) return [];
+
+    const reasons = new Map<string, 'mention' | 'reply'>();
+    const body = typeof message.body === 'string' ? message.body.toLowerCase() : '';
+    for (const member of members.rows) {
+      const displayName = member.display_name.trim().toLowerCase();
+      if (displayName && body.includes(`@${displayName}`)) {
+        reasons.set(member.user_id, 'mention');
+      }
+    }
+
+    const replyTo =
+      message.replyTo && typeof message.replyTo === 'object' && 'id' in message.replyTo
+        ? (message.replyTo as { id?: unknown }).id
+        : undefined;
+    if (typeof replyTo === 'string') {
+      const replyTarget = await this.pool.query<{ sender_id: string }>(
+        'SELECT sender_id FROM synced_messages WHERE id = $1 AND conversation_id = $2',
+        [replyTo, conversationId],
+      );
+      const replyRecipient = replyTarget.rows[0]?.sender_id;
+      if (replyRecipient && replyRecipient !== senderId) {
+        const isMember = members.rows.some(({ user_id }) => user_id === replyRecipient);
+        if (isMember && !reasons.has(replyRecipient)) reasons.set(replyRecipient, 'reply');
+      }
+    }
+    if (reasons.size === 0) return [];
+
+    const senderResult = await this.pool.query<{ display_name: string }>(
+      'SELECT display_name FROM users WHERE id = $1',
+      [senderId],
+    );
+    const senderName =
+      typeof message.senderName === 'string' && message.senderName.trim()
+        ? message.senderName.trim()
+        : (senderResult.rows[0]?.display_name ?? 'Someone');
+    const title = typeof conversation.title === 'string' ? conversation.title : 'Scuttlebutt';
+    const isDirect = conversation.kind === 'direct';
+    const surface = isDirect ? 'dms' : 'groups';
+    const url = `/?surface=${surface}&conversation=${encodeURIComponent(conversationId)}`;
+    const tag = `scuttlebutt-${message.id}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+    const userIds = [...reasons.keys()];
+    const subscriptions = await this.pool.query<{
+      auth: string;
+      endpoint: string;
+      p256dh: string;
+      user_id: string;
+    }>(
+      `SELECT endpoint, user_id, p256dh, auth
+       FROM push_subscriptions
+       WHERE user_id = ANY($1::uuid[])`,
+      [userIds],
+    );
+
+    return subscriptions.rows.map((subscription) => {
+      const reason = reasons.get(subscription.user_id) ?? 'mention';
+      return {
+        auth: subscription.auth,
+        body:
+          reason === 'mention'
+            ? `${senderName} mentioned you in ${isDirect ? 'a direct message' : `#${title}`}.`
+            : `${senderName} replied to you in ${isDirect ? 'a direct message' : `#${title}`}.`,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.p256dh,
+        reason,
+        tag,
+        title: reason === 'mention' ? 'You were mentioned' : 'New reply',
+        url,
+      };
+    });
   }
 
   async listMessages(userId: string, conversationId: string): Promise<unknown[]> {

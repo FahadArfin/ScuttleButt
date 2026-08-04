@@ -7,6 +7,9 @@ const app = buildApp({
   databaseUrl: config.databaseUrl,
   googleClientId: config.googleClientId,
   staticDirectory: config.staticDirectory,
+  webPushPrivateKey: config.webPushPrivateKey,
+  webPushPublicKey: config.webPushPublicKey,
+  webPushSubject: config.webPushSubject,
   webOrigin: config.webOrigin,
 });
 

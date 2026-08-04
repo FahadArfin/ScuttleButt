@@ -67,6 +67,11 @@ jobs:
           region: ${{ env.GCP_REGION }}
           service: ${{ env.SERVICE }}
           image: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/app:${{ github.sha }}
+          env_vars: |-
+            WEB_PUSH_PRIVATE_KEY=${{ secrets.WEB_PUSH_PRIVATE_KEY }}
+            WEB_PUSH_PUBLIC_KEY=${{ secrets.WEB_PUSH_PUBLIC_KEY }}
+            WEB_PUSH_SUBJECT=${{ secrets.WEB_PUSH_SUBJECT }}
+          env_vars_update_strategy: merge
 
       - name: Verify deployed service
         env:

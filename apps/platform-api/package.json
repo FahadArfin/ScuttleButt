@@ -19,9 +19,11 @@
     "@scuttlebutt/shared-types": "workspace:*",
     "fastify": "5.11.0",
     "google-auth-library": "^10.9.1",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.3"
+    "@types/pg": "^8.20.3",
+    "@types/web-push": "^3.6.4"
   }
 }

@@ -44,8 +44,16 @@ The workflow requires these GitHub repository secrets:
 - `GCP_SERVICE_ACCOUNT`
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `VITE_GIPHY_API_KEY` (optional; enables GIF and sticker search in the picker)
+- `WEB_PUSH_PUBLIC_KEY` (required for phone/browser push notifications)
+- `WEB_PUSH_PRIVATE_KEY` (required for phone/browser push notifications)
+- `WEB_PUSH_SUBJECT` (required; for example `mailto:admin@example.com`)
 
 A local commit does not trigger GitHub Actions until it is pushed to `origin/development`.
+
+Web Push uses one stable VAPID key pair per deployment. The public key is exposed to the browser
+through `/api/push/config`; the private key is passed to Cloud Run as a runtime secret and is never
+included in the container image. Users must enable notifications from Application Settings. On iOS,
+they must first add Scuttlebutt to the Home Screen and open it as a web app.
 
 The GIPHY key is embedded in the browser bundle when enabled, so treat it as a restricted client
 key and configure its domain/rate limits in GIPHY. If it is omitted, Unicode and server emoji still

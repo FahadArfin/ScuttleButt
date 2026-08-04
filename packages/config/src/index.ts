@@ -7,6 +7,9 @@ export interface RuntimeConfig {
   webOrigin: string;
   databaseUrl?: string;
   googleClientId?: string;
+  webPushPrivateKey?: string;
+  webPushPublicKey?: string;
+  webPushSubject?: string;
   staticDirectory?: string;
 }
 
@@ -36,6 +39,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     webOrigin: env.WEB_ORIGIN ?? 'http://localhost:5173',
     databaseUrl: env.DATABASE_URL,
     googleClientId: env.GOOGLE_CLIENT_ID,
+    webPushPrivateKey: env.WEB_PUSH_PRIVATE_KEY,
+    webPushPublicKey: env.WEB_PUSH_PUBLIC_KEY,
+    webPushSubject: env.WEB_PUSH_SUBJECT,
     staticDirectory: env.STATIC_DIR,
   };
 }

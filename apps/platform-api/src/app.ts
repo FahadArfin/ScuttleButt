@@ -5,6 +5,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { OAuth2Client } from 'google-auth-library';
+import * as webPush from 'web-push';
 
 import { API_VERSION, type HealthResponse } from '@scuttlebutt/shared-types';
 
@@ -14,6 +15,9 @@ export interface PlatformAppOptions {
   databaseUrl?: string;
   googleClientId?: string;
   staticDirectory?: string;
+  webPushPrivateKey?: string;
+  webPushPublicKey?: string;
+  webPushSubject?: string;
   webOrigin?: string;
 }
 
@@ -51,8 +55,17 @@ interface ConversationRequestBody extends GoogleCredentialBody {
   conversationId: string;
 }
 
+interface PersistedMessageBody {
+  body?: string;
+  id: string;
+  replyTo?: unknown;
+  senderId?: string;
+  senderName?: string;
+  [key: string]: unknown;
+}
+
 interface MessageBody extends ConversationRequestBody {
-  message: { id: string; senderId?: string };
+  message: PersistedMessageBody;
 }
 
 interface MessageMutationBody extends ConversationRequestBody {
@@ -74,10 +87,54 @@ interface GroupInviteBody extends GoogleCredentialBody {
   group: Record<string, unknown>;
 }
 
+interface PushSubscriptionBody extends GoogleCredentialBody {
+  subscription: {
+    endpoint: string;
+    expirationTime?: number | null;
+    keys: {
+      auth: string;
+      p256dh: string;
+    };
+  };
+}
+
+interface PushUnsubscribeBody extends GoogleCredentialBody {
+  endpoint: string;
+}
+
+function isValidPushSubscription(value: unknown): value is PushSubscriptionBody['subscription'] {
+  if (!value || typeof value !== 'object') return false;
+  const subscription = value as Partial<PushSubscriptionBody['subscription']>;
+  return Boolean(
+    typeof subscription.endpoint === 'string' &&
+    subscription.endpoint.startsWith('https://') &&
+    subscription.endpoint.length <= 4096 &&
+    subscription.keys &&
+    typeof subscription.keys.auth === 'string' &&
+    subscription.keys.auth.length <= 512 &&
+    typeof subscription.keys.p256dh === 'string' &&
+    subscription.keys.p256dh.length <= 512,
+  );
+}
+
+function errorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('statusCode' in error)) return undefined;
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  return typeof statusCode === 'number' ? statusCode : undefined;
+}
+
 export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 });
   const google = options.googleClientId ? new OAuth2Client(options.googleClientId) : undefined;
   const database = options.databaseUrl ? new ScuttlebuttDatabase(options.databaseUrl) : undefined;
+  const webPushOptions =
+    options.webPushPublicKey && options.webPushPrivateKey && options.webPushSubject
+      ? {
+          privateKey: options.webPushPrivateKey,
+          publicKey: options.webPushPublicKey,
+          subject: options.webPushSubject,
+        }
+      : undefined;
   const authenticate = async (credential: string): Promise<string> => {
     if (!google || !options.googleClientId || !database) {
       throw Object.assign(new Error('Cloud synchronization is not configured.'), {
@@ -110,7 +167,41 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
   app.get('/api/config', async () => ({
     googleClientId: options.googleClientId ?? null,
     persistence: database ? 'postgres' : 'local-demo',
+    webPushPublicKey: webPushOptions?.publicKey ?? null,
   }));
+
+  app.get('/api/push/config', async () => ({
+    publicKey: webPushOptions?.publicKey ?? null,
+  }));
+
+  app.post<{ Body: PushSubscriptionBody }>('/api/push/subscribe', async (request, reply) => {
+    if (!webPushOptions) {
+      return reply.code(503).send({ error: 'Push notifications are not configured.' });
+    }
+    const userId = await authenticate(request.body.credential);
+    if (!isValidPushSubscription(request.body.subscription)) {
+      return reply.code(400).send({ error: 'Push subscription is invalid.' });
+    }
+    await database!.upsertPushSubscription(
+      userId,
+      request.body.subscription,
+      request.headers['user-agent'],
+    );
+    return { saved: true };
+  });
+
+  app.post<{ Body: PushUnsubscribeBody }>('/api/push/unsubscribe', async (request, reply) => {
+    const userId = await authenticate(request.body.credential);
+    if (
+      typeof request.body.endpoint !== 'string' ||
+      !request.body.endpoint.startsWith('https://') ||
+      request.body.endpoint.length > 4096
+    ) {
+      return reply.code(400).send({ error: 'Push endpoint is invalid.' });
+    }
+    await database!.removePushSubscription(userId, request.body.endpoint);
+    return { saved: true };
+  });
 
   app.post<{ Body: GoogleCredentialBody }>('/api/auth/google', async (request, reply) => {
     if (!google || !options.googleClientId) {
@@ -274,8 +365,57 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
   app.post<{ Body: MessageBody }>('/api/sync/messages', async (request) => {
     const userId = await authenticate(request.body.credential);
     const message = { ...request.body.message, senderId: userId };
+    const savedMessage = await database!.saveMessage(userId, request.body.conversationId, message);
+    if (webPushOptions) {
+      try {
+        const targets = await database!.getMessagePushTargets(
+          userId,
+          request.body.conversationId,
+          request.body.message,
+        );
+        await Promise.all(
+          targets.map(async (target) => {
+            try {
+              await webPush.sendNotification(
+                {
+                  endpoint: target.endpoint,
+                  keys: { auth: target.auth, p256dh: target.p256dh },
+                },
+                JSON.stringify({
+                  body: target.body,
+                  data: {
+                    conversationId: request.body.conversationId,
+                    reason: target.reason,
+                    url: target.url,
+                  },
+                  icon: '/scuttlebutt-mark.webp',
+                  tag: target.tag,
+                  title: target.title,
+                }),
+                {
+                  TTL: 60,
+                  urgency: 'high',
+                  vapidDetails: webPushOptions,
+                },
+              );
+            } catch (error) {
+              if (errorStatusCode(error) === 404 || errorStatusCode(error) === 410) {
+                await database!.removePushSubscriptionByEndpoint(target.endpoint);
+              } else {
+                request.log.warn(
+                  { statusCode: errorStatusCode(error) },
+                  'Web Push delivery failed; message was saved.',
+                );
+              }
+            }
+          }),
+        );
+      } catch (error) {
+        request.log.warn({ error }, 'Web Push notification preparation failed; message was saved.');
+      }
+    }
     return {
-      message: await database!.saveMessage(userId, request.body.conversationId, message),
+      message: savedMessage,
     };
   });
 

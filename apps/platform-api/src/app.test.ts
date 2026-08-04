@@ -29,4 +29,17 @@ describe('platform API', () => {
     expect(response.statusCode).toBe(503);
     await app.close();
   });
+
+  it('exposes only the configured web push public key', async () => {
+    const app = buildApp({
+      webPushPrivateKey: 'private-key',
+      webPushPublicKey: 'public-key',
+      webPushSubject: 'mailto:test@example.com',
+    });
+    const response = await app.inject({ method: 'GET', url: '/api/push/config' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ publicKey: 'public-key' });
+    await app.close();
+  });
 });

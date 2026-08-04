@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -75,6 +76,7 @@ import {
   type SignedInUser,
 } from './auth.js';
 import { optimizeAvatar } from './image-utils.js';
+import { disablePushNotifications, syncPushNotifications } from './push-notifications.js';
 import { MediaPicker, type MediaAsset } from './media-picker.js';
 import {
   loadFriendState,
@@ -610,6 +612,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [applicationPreferences, setApplicationPreferences] = useState(() =>
     loadApplicationPreferences(user.id),
   );
+  const handledNotificationLinkRef = useRef(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(!googleCredential);
@@ -737,6 +740,11 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   }, [googleCredential, repository]);
 
   useEffect(() => {
+    if (!googleCredential) return;
+    void syncPushNotifications(googleCredential).catch(() => undefined);
+  }, [googleCredential]);
+
+  useEffect(() => {
     if (!workspaceReady) return;
     let mounted = true;
     const prepareWorkspace = async () => {
@@ -761,6 +769,37 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       mounted = false;
     };
   }, [repository, workspaceReady]);
+
+  useEffect(() => {
+    if (!workspaceReady || handledNotificationLinkRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const conversationId = params.get('conversation');
+    if (!conversationId) {
+      handledNotificationLinkRef.current = true;
+      return;
+    }
+    const conversation = conversations.find(({ id }) => id === conversationId);
+    if (!conversation) return;
+
+    const surface: AppSurface =
+      params.get('surface') === 'dms' || conversation.kind === 'direct' ? 'dms' : 'groups';
+    setSelectedConversationId(conversationId);
+    setActiveSurface(surface);
+    if (surface === 'groups') {
+      const group = groups.find(({ channels }) =>
+        channels.some(
+          ({ conversationId: channelConversationId }) => channelConversationId === conversationId,
+        ),
+      );
+      if (group) setActiveGroupId(group.id);
+    }
+    handledNotificationLinkRef.current = true;
+    window.history.replaceState(
+      {},
+      document.title,
+      `${window.location.pathname}${window.location.hash}`,
+    );
+  }, [conversations, groups, workspaceReady]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -1441,6 +1480,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   };
 
   const logOut = () => {
+    if (googleCredential) void disablePushNotifications(googleCredential);
     clearAuthSession();
     window.location.reload();
   };
@@ -2183,6 +2223,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       ) : null}
       {applicationSettingsOpen ? (
         <ApplicationSettingsDialog
+          credential={googleCredential}
           onChange={updateApplicationPreferences}
           onClose={() => setApplicationSettingsOpen(false)}
           onEditProfile={() => {
