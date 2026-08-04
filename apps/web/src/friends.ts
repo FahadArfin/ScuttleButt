@@ -16,6 +16,16 @@ export interface FriendState {
   outgoing: FriendProfile[];
 }
 
+export class FriendApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'FriendApiError';
+    this.status = status;
+  }
+}
+
 async function friendRequest<T>(
   path: string,
   credential: string,
@@ -27,7 +37,12 @@ async function friendRequest<T>(
     body: JSON.stringify({ credential, ...body }),
   });
   const payload = (await response.json()) as T & { message?: string };
-  if (!response.ok) throw new Error(payload.message ?? 'Friend request could not be completed.');
+  if (!response.ok) {
+    throw new FriendApiError(
+      payload.message ?? 'Friend request could not be completed.',
+      response.status,
+    );
+  }
   return payload;
 }
 

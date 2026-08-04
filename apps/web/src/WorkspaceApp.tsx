@@ -72,6 +72,7 @@ import { MessageRow, PersonAvatar } from './App.js';
 import {
   clearAuthSession,
   getStoredGoogleCredential,
+  requestGoogleCredentialRefresh,
   updateStoredAuthUser,
   type SignedInUser,
 } from './auth.js';
@@ -79,6 +80,7 @@ import { optimizeAvatar } from './image-utils.js';
 import { disablePushNotifications, syncPushNotifications } from './push-notifications.js';
 import { MediaPicker, type MediaAsset } from './media-picker.js';
 import {
+  FriendApiError,
   loadFriendState,
   respondToFriendRequest,
   sendFriendRequest,
@@ -550,12 +552,13 @@ function NotificationMarker({ direct = false, label }: { direct?: boolean; label
 
 export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
   const googleCredential = user.id === 'local-user' ? null : getStoredGoogleCredential();
-  const [repository] = useState<MessagingRepository>(
+  const repository = useMemo<MessagingRepository>(
     () =>
       repositoryProp ??
       (googleCredential
         ? createSyncedMessagingRepository(googleCredential, { id: user.id, name: user.name })
         : createDemoMessagingRepository({ id: user.id, name: user.name })),
+    [googleCredential, repositoryProp, user.id, user.name],
   );
   const [groups, setGroups] = useState<WorkspaceGroup[]>(loadStoredGroups);
   const [customDms, setCustomDms] = useState<Conversation[]>(loadStoredDms);
@@ -617,12 +620,20 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(!googleCredential);
   const [cloudWorkspaceExists, setCloudWorkspaceExists] = useState(false);
-  const selectedConversation = conversations.find(({ id }) => id === selectedConversationId);
   const directMessages = conversations.filter(
     ({ id, kind }) => kind === 'direct' && !id.startsWith('friend-'),
   );
   const friendCode = friendState.friendCode;
   const activeGroup = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
+  const selectedChannel = activeGroup?.channels.find(
+    ({ conversationId }) => conversationId === selectedConversationId,
+  );
+  const syncedSelectedConversation = conversations.find(({ id }) => id === selectedConversationId);
+  const selectedConversation =
+    syncedSelectedConversation ??
+    (activeSurface === 'groups' && activeGroup && selectedChannel
+      ? conversationForChannel(activeGroup, selectedChannel)
+      : undefined);
   const hideMutedChannels = Boolean(activeGroup && hiddenMutedGroups[activeGroup.id]);
   const canManageActiveGroup = Boolean(
     activeGroup && (!activeGroup.ownerId || activeGroup.ownerId === user.id),
@@ -663,9 +674,6 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
   const joinedVoice = groups
     .flatMap((group) => group.channels.map((channel) => ({ channel, group })))
     .find(({ channel }) => channel.kind === 'voice' && channel.participantIds.includes(user.id));
-  const selectedChannel = activeGroup?.channels.find(
-    ({ conversationId }) => conversationId === selectedConversationId,
-  );
   const activeUnreadCount =
     selectedChannel?.muted || !selectedConversation ? 0 : selectedConversation.unreadCount;
   const showNewMessagesBanner = Boolean(
@@ -727,7 +735,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 : workspace.groups,
             );
           }
-          void repository.getConversations().then(setConversations);
+          void repository
+            .getConversations()
+            .then(setConversations)
+            .catch(() => undefined);
         })
         .catch(() => undefined);
     };
@@ -748,27 +759,42 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     if (!workspaceReady) return;
     let mounted = true;
     const prepareWorkspace = async () => {
-      await Promise.all([
-        ...groups.flatMap((group) =>
-          group.channels.map((channel) =>
-            repository.createConversation(conversationForChannel(group, channel)),
+      try {
+        await Promise.all([
+          ...groups.flatMap((group) =>
+            group.channels.map((channel) =>
+              repository.createConversation(conversationForChannel(group, channel)),
+            ),
           ),
-        ),
-        ...customDms.map((conversation) => repository.createConversation(conversation)),
-      ]);
-      const nextConversations = await repository.getConversations();
-      if (!mounted) return;
-      setConversations(nextConversations);
-      setSelectedConversationId(
-        nextConversations.find(({ id }) => id === 'lounge')?.id ?? nextConversations[0]?.id ?? '',
-      );
-      setIsLoading(false);
+          ...customDms.map((conversation) => repository.createConversation(conversation)),
+        ]);
+        const nextConversations = await repository.getConversations();
+        if (!mounted) return;
+        setConversations(nextConversations);
+        setSelectedConversationId((current) => {
+          if (current && nextConversations.some(({ id }) => id === current)) return current;
+          return (
+            nextConversations.find(({ id }) => id === 'lounge')?.id ??
+            nextConversations[0]?.id ??
+            ''
+          );
+        });
+        setIsLoading(false);
+      } catch (reason) {
+        if (!mounted) return;
+        setIsLoading(false);
+        setNotice({
+          tone: 'error',
+          text:
+            reason instanceof Error ? reason.message : 'Cloud workspace could not be synchronized.',
+        });
+      }
     };
     void prepareWorkspace();
     return () => {
       mounted = false;
     };
-  }, [repository, workspaceReady]);
+  }, [customDms, groups, repository, workspaceReady]);
 
   useEffect(() => {
     if (!workspaceReady || handledNotificationLinkRef.current) return;
@@ -841,21 +867,38 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     }
     let mounted = true;
     setIsLoading(true);
-    void repository.getMessages(selectedConversationId).then((nextMessages) => {
-      if (!mounted) return;
-      setMessages(nextMessages);
-      setIsLoading(false);
-    });
+    void repository
+      .getMessages(selectedConversationId)
+      .then((nextMessages) => {
+        if (!mounted) return;
+        setMessages(nextMessages);
+        setIsLoading(false);
+      })
+      .catch((reason: unknown) => {
+        if (!mounted) return;
+        setMessages([]);
+        setIsLoading(false);
+        setNotice({
+          tone: 'error',
+          text: reason instanceof Error ? reason.message : 'Messages could not be loaded.',
+        });
+      });
     return () => {
       mounted = false;
     };
-  }, [repository, selectedConversationId]);
+  }, [repository, selectedConversationId, syncedSelectedConversation?.id]);
 
   useEffect(() => {
     if (!googleCredential || !selectedConversationId) return;
     const interval = window.setInterval(() => {
-      void repository.getMessages(selectedConversationId).then(setMessages);
-      void repository.getConversations().then(setConversations);
+      void repository
+        .getMessages(selectedConversationId)
+        .then(setMessages)
+        .catch(() => undefined);
+      void repository
+        .getConversations()
+        .then(setConversations)
+        .catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(interval);
   }, [googleCredential, repository, selectedConversationId]);
@@ -1499,6 +1542,20 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       updateStoredAuthUser({ ...user, presence: next });
       setNotice({ tone: 'info', text: `Your status is now ${PRESENCE_LABELS[next]}.` });
     } catch (reason) {
+      if (reason instanceof FriendApiError && reason.status === 401) {
+        const refreshedCredential = await requestGoogleCredentialRefresh();
+        if (refreshedCredential) {
+          try {
+            await updatePresence(refreshedCredential, next);
+            updateStoredAuthUser({ ...user, presence: next });
+            setProfile((current) => ({ ...current, presence: next }));
+            setNotice({ tone: 'info', text: `Your status is now ${PRESENCE_LABELS[next]}.` });
+            return;
+          } catch {
+            // Fall through to the normal rollback and error message.
+          }
+        }
+      }
       setProfile((current) => ({ ...current, presence: previous }));
       setNotice({
         tone: 'error',

@@ -499,26 +499,119 @@ export class ScuttlebuttDatabase {
   }
 
   async saveWorkspace(userId: string, workspace: SyncedWorkspace): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO user_workspace_state (user_id, groups, dms)
-       VALUES ($1, $2::jsonb, $3::jsonb)
-       ON CONFLICT (user_id) DO UPDATE SET
-         groups = EXCLUDED.groups, dms = EXCLUDED.dms, updated_at = now()`,
-      [userId, JSON.stringify(workspace.groups), JSON.stringify(workspace.dms)],
-    );
-    for (const value of workspace.groups) {
-      const group = value as { id?: unknown };
-      if (typeof group.id !== 'string' || !group.id) continue;
-      await this.pool.query(
-        `INSERT INTO synced_groups (id, owner_id, group_data) VALUES ($1, $2, $3::jsonb)
-         ON CONFLICT (id) DO UPDATE SET group_data = EXCLUDED.group_data, updated_at = now()`,
-        [group.id, userId, JSON.stringify(value)],
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO user_workspace_state (user_id, groups, dms)
+         VALUES ($1, $2::jsonb, $3::jsonb)
+         ON CONFLICT (user_id) DO UPDATE SET
+           groups = EXCLUDED.groups, dms = EXCLUDED.dms, updated_at = now()`,
+        [userId, JSON.stringify(workspace.groups), JSON.stringify(workspace.dms)],
       );
-      await this.pool.query(
-        `INSERT INTO synced_group_members (group_id, user_id, role) VALUES ($1, $2, 'owner')
-         ON CONFLICT DO NOTHING`,
-        [group.id, userId],
-      );
+
+      for (const value of workspace.groups) {
+        const group = value as {
+          channels?: unknown;
+          id?: unknown;
+          members?: unknown;
+          name?: unknown;
+        };
+        if (typeof group.id !== 'string' || !group.id) continue;
+        const groupName = typeof group.name === 'string' ? group.name : 'Scuttlebutt group';
+        const memberCount = Array.isArray(group.members) ? group.members.length : 1;
+
+        await client.query(
+          `INSERT INTO synced_groups (id, owner_id, group_data) VALUES ($1, $2, $3::jsonb)
+           ON CONFLICT (id) DO UPDATE SET group_data = EXCLUDED.group_data, updated_at = now()`,
+          [group.id, userId, JSON.stringify(value)],
+        );
+        await client.query(
+          `INSERT INTO synced_group_members (group_id, user_id, role) VALUES ($1, $2, 'owner')
+           ON CONFLICT DO NOTHING`,
+          [group.id, userId],
+        );
+
+        const channels = Array.isArray(group.channels) ? group.channels : [];
+        for (const channelValue of channels) {
+          const channel = channelValue as {
+            conversationId?: unknown;
+            kind?: unknown;
+            name?: unknown;
+          };
+          if (
+            typeof channel.conversationId !== 'string' ||
+            !channel.conversationId ||
+            typeof channel.name !== 'string' ||
+            !channel.name
+          ) {
+            continue;
+          }
+          const channelKind =
+            channel.kind === 'voice' || channel.kind === 'forum' ? channel.kind : 'text';
+          const conversation = {
+            id: channel.conversationId,
+            title: channel.name,
+            kind: 'channel',
+            avatarLabel: channelKind === 'voice' ? 'VC' : channelKind === 'forum' ? 'F' : '#',
+            presence:
+              channelKind === 'voice'
+                ? 'Voice room'
+                : channelKind === 'forum'
+                  ? `${groupName} forum channel`
+                  : `${groupName} text channel`,
+            preview:
+              channelKind === 'voice'
+                ? 'Meeting chat and voice room.'
+                : channelKind === 'forum'
+                  ? 'Start a discussion.'
+                  : 'Start the conversation.',
+            updatedAt: 'Now',
+            unreadCount: 0,
+            encrypted: true,
+            members: memberCount,
+            categoryId: group.id,
+            categoryName: groupName,
+            channelKind,
+            voiceRoomId: channelKind === 'voice' ? channel.conversationId : undefined,
+          };
+          await client.query(
+            `INSERT INTO synced_conversations (id, conversation) VALUES ($1, $2::jsonb)
+             ON CONFLICT (id) DO UPDATE SET conversation = EXCLUDED.conversation, updated_at = now()`,
+            [channel.conversationId, JSON.stringify(conversation)],
+          );
+          await client.query(
+            `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
+             VALUES ($1, $2, $3::jsonb)
+             ON CONFLICT (conversation_id, user_id)
+             DO UPDATE SET conversation = EXCLUDED.conversation`,
+            [channel.conversationId, userId, JSON.stringify(conversation)],
+          );
+        }
+      }
+
+      for (const value of workspace.dms) {
+        const conversation = value as { id?: unknown };
+        if (typeof conversation.id !== 'string' || !conversation.id) continue;
+        await client.query(
+          `INSERT INTO synced_conversations (id, conversation) VALUES ($1, $2::jsonb)
+           ON CONFLICT (id) DO UPDATE SET conversation = EXCLUDED.conversation, updated_at = now()`,
+          [conversation.id, JSON.stringify(value)],
+        );
+        await client.query(
+          `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
+           VALUES ($1, $2, $3::jsonb)
+           ON CONFLICT (conversation_id, user_id)
+           DO UPDATE SET conversation = EXCLUDED.conversation`,
+          [conversation.id, userId, JSON.stringify(value)],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
   }
 

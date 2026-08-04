@@ -28,6 +28,11 @@ const LEGACY_USER_STORAGE_KEY = 'scuttlebutt:user';
 const LEGACY_CREDENTIAL_STORAGE_KEY = 'scuttlebutt:google-credential';
 const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const GOOGLE_CREDENTIAL_REFRESH_INTERVAL_MS = 45 * 60 * 1000;
+const GOOGLE_CREDENTIAL_REFRESH_EVENT = 'scuttlebutt:refresh-google-credential';
+
+interface GoogleCredentialRefreshDetail {
+  resolve: (credential: string | null) => void;
+}
 
 export interface AuthSession {
   credential: string | null;
@@ -128,13 +133,28 @@ export function getStoredGoogleCredential(): string | null {
   return session?.credential || null;
 }
 
+export function requestGoogleCredentialRefresh(): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (credential: string | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(credential);
+    };
+    const timeout = window.setTimeout(() => finish(null), 12_000);
+    window.dispatchEvent(
+      new CustomEvent<GoogleCredentialRefreshDetail>(GOOGLE_CREDENTIAL_REFRESH_EVENT, {
+        detail: { resolve: finish },
+      }),
+    );
+  });
+}
+
 export function updateStoredAuthUser(user: SignedInUser): void {
   const session = loadAuthSession();
   if (!session) return;
-  window.localStorage.setItem(
-    AUTH_SESSION_STORAGE_KEY,
-    JSON.stringify({ ...session, user }),
-  );
+  window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({ ...session, user }));
 }
 
 export function clearAuthSession(): void {
@@ -147,7 +167,7 @@ function shouldRefreshGoogleCredential(): boolean {
   const session = loadAuthSession();
   return Boolean(
     session?.credential &&
-      Date.now() - session.credentialRefreshedAt >= GOOGLE_CREDENTIAL_REFRESH_INTERVAL_MS,
+    Date.now() - session.credentialRefreshedAt >= GOOGLE_CREDENTIAL_REFRESH_INTERVAL_MS,
   );
 }
 
@@ -177,7 +197,34 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
   const currentUserRef = useRef(user);
   const googleMountedRef = useRef<string | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
+  const pendingCredentialRefreshesRef = useRef<Array<(credential: string | null) => void>>([]);
   currentUserRef.current = user;
+
+  const resolvePendingCredentialRefreshes = (credential: string | null) => {
+    const pending = pendingCredentialRefreshesRef.current;
+    pendingCredentialRefreshesRef.current = [];
+    pending.forEach((resolve) => resolve(credential));
+  };
+
+  useEffect(() => {
+    const handleCredentialRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<GoogleCredentialRefreshDetail>).detail;
+      if (!detail || typeof detail.resolve !== 'function') return;
+      if (!window.google || !clientId || googleMountedRef.current !== clientId) {
+        detail.resolve(null);
+        return;
+      }
+      pendingCredentialRefreshesRef.current.push(detail.resolve);
+      try {
+        window.google.accounts.id.prompt();
+      } catch {
+        resolvePendingCredentialRefreshes(null);
+      }
+    };
+    window.addEventListener(GOOGLE_CREDENTIAL_REFRESH_EVENT, handleCredentialRefresh);
+    return () =>
+      window.removeEventListener(GOOGLE_CREDENTIAL_REFRESH_EVENT, handleCredentialRefresh);
+  }, [clientId]);
 
   useEffect(() => {
     void fetch('/api/config')
@@ -211,10 +258,12 @@ export function AuthGate({ children }: { children: (user: SignedInUser) => React
               const nextUser = normalizeUser(payload.user);
               persistAuthSession(nextUser, response.credential);
               setUser(nextUser);
+              resolvePendingCredentialRefreshes(response.credential);
             })
-            .catch((reason: unknown) =>
-              setError(reason instanceof Error ? reason.message : 'Sign-in failed.'),
-          );
+            .catch((reason: unknown) => {
+              resolvePendingCredentialRefreshes(null);
+              setError(reason instanceof Error ? reason.message : 'Sign-in failed.');
+            });
         },
       });
       if (currentUserRef.current) {
