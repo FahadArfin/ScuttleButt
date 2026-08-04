@@ -265,6 +265,12 @@ export function buildApp(options: PlatformAppOptions = {}): FastifyInstance {
     };
   });
 
+  app.post<{ Body: ConversationRequestBody }>('/api/sync/messages/read', async (request) => {
+    const userId = await authenticate(request.body.credential);
+    await database!.markConversationRead(userId, request.body.conversationId);
+    return { saved: true };
+  });
+
   app.post<{ Body: MessageBody }>('/api/sync/messages', async (request) => {
     const userId = await authenticate(request.body.credential);
     const message = { ...request.body.message, senderId: userId };

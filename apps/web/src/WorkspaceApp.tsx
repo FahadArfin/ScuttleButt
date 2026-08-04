@@ -501,6 +501,51 @@ function formatEventLocation(event: ServerEvent): string {
   return event.locationType === 'voice' ? `Voice channel · ${event.location}` : event.location;
 }
 
+interface NotificationSummary {
+  hasDirectActivity: boolean;
+  unreadCount: number;
+}
+
+function notificationSummaryForGroup(
+  group: WorkspaceGroup,
+  conversations: Conversation[],
+): NotificationSummary {
+  const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+  return group.channels.reduce<NotificationSummary>(
+    (summary, channel) => {
+      if (channel.muted) return summary;
+      const conversation = byId.get(channel.conversationId);
+      const unreadCount = conversation?.unreadCount ?? 0;
+      return {
+        hasDirectActivity:
+          summary.hasDirectActivity || Boolean(unreadCount > 0 && conversation?.hasMention),
+        unreadCount: summary.unreadCount + unreadCount,
+      };
+    },
+    { hasDirectActivity: false, unreadCount: 0 },
+  );
+}
+
+function formatReadTime(value?: string): string {
+  if (!value) return 'your last visit';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'your last visit';
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function NotificationMarker({ direct = false, label }: { direct?: boolean; label: string }) {
+  return (
+    <span
+      aria-label={label}
+      className={`notification-marker ${direct ? 'notification-marker-direct' : 'notification-marker-activity'}`}
+      role="status"
+      title={label}
+    >
+      {direct ? '@' : null}
+    </span>
+  );
+}
+
 export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppProps) {
   const googleCredential = user.id === 'local-user' ? null : getStoredGoogleCredential();
   const [repository] = useState<MessagingRepository>(
@@ -617,6 +662,14 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     .find(({ channel }) => channel.kind === 'voice' && channel.participantIds.includes(user.id));
   const selectedChannel = activeGroup?.channels.find(
     ({ conversationId }) => conversationId === selectedConversationId,
+  );
+  const activeUnreadCount =
+    selectedChannel?.muted || !selectedConversation ? 0 : selectedConversation.unreadCount;
+  const showNewMessagesBanner = Boolean(
+    activeUnreadCount > 0 &&
+    selectedConversation &&
+    selectedConversation.channelKind !== 'voice' &&
+    selectedConversation.channelKind !== 'forum',
   );
   const showConversation =
     Boolean(selectedConversation) && (activeSurface === 'dms' || activeSurface === 'groups');
@@ -749,14 +802,10 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     }
     let mounted = true;
     setIsLoading(true);
-    void Promise.all([
-      repository.getMessages(selectedConversationId),
-      repository.markRead(selectedConversationId),
-    ]).then(([nextMessages]) => {
+    void repository.getMessages(selectedConversationId).then((nextMessages) => {
       if (!mounted) return;
       setMessages(nextMessages);
       setIsLoading(false);
-      void repository.getConversations().then(setConversations);
     });
     return () => {
       mounted = false;
@@ -798,6 +847,35 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
 
   const refreshConversations = async () => {
     setConversations(await repository.getConversations());
+  };
+
+  const markConversationRead = async (conversationId = selectedConversationId) => {
+    const conversation = conversations.find(({ id }) => id === conversationId);
+    if (!conversation || (conversation.unreadCount === 0 && !conversation.hasMention)) return;
+    const lastReadAt = new Date().toISOString();
+    setConversations((current) =>
+      current.map((item) =>
+        item.id === conversationId
+          ? { ...item, unreadCount: 0, hasMention: false, lastReadAt }
+          : item,
+      ),
+    );
+    try {
+      await repository.markRead(conversationId);
+    } catch (error) {
+      await refreshConversations();
+      setNotice({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Messages could not be marked as read.',
+      });
+    }
+  };
+
+  const handleComposerChange = (value: string) => {
+    setComposer(value);
+    if (value.trim() && showNewMessagesBanner) {
+      void markConversationRead();
+    }
   };
 
   const selectConversation = (conversationId: string, surface: AppSurface) => {
@@ -846,6 +924,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       setAttachments([]);
       setReplyTo(undefined);
       setEditingMessage(undefined);
+      await markConversationRead();
       await refreshMessages();
       setNotice({ tone: 'info', text: editingMessage ? 'Message updated.' : 'Message sent.' });
     } catch (error) {
@@ -1435,6 +1514,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
         <ServerRail
           activeGroupId={activeGroupId}
           activeSurface={activeSurface}
+          conversations={conversations}
           groups={groups}
           onCreateGroup={() => setDialogMode('group')}
           onExplore={() => {
@@ -1623,6 +1703,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
 
             {activeSurface === 'groups' && activeGroup ? (
               <GroupNavigation
+                conversations={conversations}
                 group={activeGroup}
                 currentUserId={user.id}
                 localAvatar={profile.avatar}
@@ -1842,6 +1923,17 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                   aria-live="polite"
                   aria-label="Message timeline"
                 >
+                  {showNewMessagesBanner && selectedConversation ? (
+                    <div className="new-messages-banner" role="status">
+                      <span>
+                        {activeUnreadCount} new message{activeUnreadCount === 1 ? '' : 's'} since{' '}
+                        {formatReadTime(selectedConversation.lastReadAt)}
+                      </span>
+                      <button type="button" onClick={() => void markConversationRead()}>
+                        Mark as read <Check size={15} weight="bold" />
+                      </button>
+                    </div>
+                  ) : null}
                   {selectedConversation.channelKind === 'voice' ? (
                     <div className="voice-room-layout">
                       <div className="voice-room-stage">
@@ -1935,7 +2027,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                       setReplyTo(undefined);
                       if (editingMessage) setComposer('');
                     }}
-                    onChange={setComposer}
+                    onChange={handleComposerChange}
                     onFiles={handleFiles}
                     onInsert={(value) =>
                       setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
@@ -2004,7 +2096,7 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
                 setReplyTo(undefined);
                 if (editingMessage) setComposer('');
               }}
-              onChange={setComposer}
+              onChange={handleComposerChange}
               onFiles={handleFiles}
               onInsert={(value) =>
                 setComposer((current) => `${current}${current ? ' ' : ''}${value}`)
@@ -2191,6 +2283,7 @@ function VoiceConnectionPanel({
 function ServerRail({
   activeGroupId,
   activeSurface,
+  conversations,
   groups,
   onCreateGroup,
   onExplore,
@@ -2199,6 +2292,7 @@ function ServerRail({
 }: {
   activeGroupId: string;
   activeSurface: AppSurface;
+  conversations: Conversation[];
   groups: WorkspaceGroup[];
   onCreateGroup: () => void;
   onExplore: () => void;
@@ -2217,19 +2311,34 @@ function ServerRail({
         <span className="visually-hidden">{APP_NAME}</span>
       </button>
       <div className="server-rail-divider" />
-      {groups.map((group) => (
-        <button
-          type="button"
-          className={`server-mark ${activeSurface === 'groups' && activeGroupId === group.id ? 'server-mark-active' : ''}`}
-          aria-label={`${group.name} group`}
-          title={group.name}
-          key={group.id}
-          style={serverThemeStyle(group)}
-          onClick={() => onOpenGroup(group.id)}
-        >
-          <ServerProfileIcon group={group} />
-        </button>
-      ))}
+      {groups.map((group) =>
+        (() => {
+          const summary = notificationSummaryForGroup(group, conversations);
+          return (
+            <button
+              type="button"
+              className={`server-mark ${activeSurface === 'groups' && activeGroupId === group.id ? 'server-mark-active' : ''}`}
+              aria-label={`${group.name} group${summary.unreadCount > 0 ? `, ${summary.unreadCount} unread` : ''}`}
+              title={group.name}
+              key={group.id}
+              style={serverThemeStyle(group)}
+              onClick={() => onOpenGroup(group.id)}
+            >
+              <ServerProfileIcon group={group} />
+              {summary.unreadCount > 0 ? (
+                <NotificationMarker
+                  direct={summary.hasDirectActivity}
+                  label={
+                    summary.hasDirectActivity
+                      ? `${group.name} has a mention or reply for you`
+                      : `${group.name} has unread activity`
+                  }
+                />
+              ) : null}
+            </button>
+          );
+        })(),
+      )}
       <button
         type="button"
         className="server-mark server-mark-add"
@@ -2301,7 +2410,7 @@ function DirectMessageNavigation({
           {conversations.map((conversation) => (
             <button
               type="button"
-              className={`dm-button ${conversation.id === selectedConversationId ? 'dm-button-active' : ''}`}
+              className={`dm-button ${conversation.id === selectedConversationId ? 'dm-button-active' : ''} ${conversation.unreadCount > 0 ? 'dm-button-unread' : ''}`}
               key={conversation.id}
               onClick={() => onSelect(conversation.id)}
             >
@@ -2312,7 +2421,11 @@ function DirectMessageNavigation({
                 size="small"
               />
               <span>{conversation.title}</span>
-              {conversation.unreadCount > 0 ? <strong>{conversation.unreadCount}</strong> : null}
+              {conversation.unreadCount > 0 ? (
+                <strong className={conversation.hasMention ? 'dm-mention-count' : undefined}>
+                  {conversation.hasMention ? '@' : conversation.unreadCount}
+                </strong>
+              ) : null}
             </button>
           ))}
           <button type="button" className="dm-button" onClick={onCreate}>
@@ -2329,6 +2442,7 @@ function DirectMessageNavigation({
 
 function GroupNavigation({
   canManage,
+  conversations,
   currentUserId,
   group,
   hideMutedChannels,
@@ -2350,6 +2464,7 @@ function GroupNavigation({
   selectedConversationId,
 }: {
   canManage: boolean;
+  conversations: Conversation[];
   currentUserId: string;
   group: WorkspaceGroup;
   hideMutedChannels: boolean;
@@ -2442,6 +2557,7 @@ function GroupNavigation({
       return (
         <ChannelSection
           channels={sectionChannels}
+          conversations={conversations}
           selectedConversationId={selectedConversationId}
           onCreate={onCreate}
           onSelect={type === 'voice' ? joinVoice : selectChannel}
@@ -2594,6 +2710,7 @@ function ChannelSection({
   channels,
   collapsed = false,
   collapseId,
+  conversations,
   currentUserId,
   localAvatar,
   localSpeaking,
@@ -2610,6 +2727,7 @@ function ChannelSection({
   channels: WorkspaceChannel[];
   collapsed?: boolean;
   collapseId?: string;
+  conversations: Conversation[];
   currentUserId: string;
   localAvatar: string;
   localSpeaking: boolean;
@@ -2652,12 +2770,18 @@ function ChannelSection({
         ) : null}
         {channels.map((channel) => {
           const active = selectedConversationId === channel.conversationId;
+          const conversation = conversations.find(({ id }) => id === channel.conversationId);
+          const unreadCount = channel.muted ? 0 : (conversation?.unreadCount ?? 0);
+          const hasDirectActivity = Boolean(unreadCount > 0 && conversation?.hasMention);
+          const unreadLabel = hasDirectActivity
+            ? `${channel.name} has a mention or reply for you`
+            : `${channel.name} has ${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`;
           if (type === 'text' || type === 'forum') {
             return (
               <div className="channel-button-row" data-channel-id={channel.id} key={channel.id}>
                 <button
                   type="button"
-                  className={`channel-button ${active ? 'channel-button-active' : ''}`}
+                  className={`channel-button ${active ? 'channel-button-active' : ''} ${unreadCount > 0 ? 'channel-button-unread' : ''}`}
                   aria-current={active ? 'page' : undefined}
                   onClick={() => onSelect(channel.conversationId)}
                 >
@@ -2669,6 +2793,9 @@ function ChannelSection({
                   <span>{channel.name}</span>
                   {channel.isPrivate ? <LockSimple size={14} /> : null}
                   {channel.muted ? <BellSlash size={14} /> : null}
+                  {unreadCount > 0 ? (
+                    <NotificationMarker direct={hasDirectActivity} label={unreadLabel} />
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -2705,6 +2832,9 @@ function ChannelSection({
                 </span>
                 <Users size={15} />
                 <b>{participants.length}</b>
+                {unreadCount > 0 ? (
+                  <NotificationMarker direct={hasDirectActivity} label={unreadLabel} />
+                ) : null}
               </button>
               <button
                 type="button"

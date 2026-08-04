@@ -189,6 +189,12 @@ export class ScuttlebuttDatabase {
       );
       CREATE INDEX IF NOT EXISTS synced_messages_conversation_created_idx
         ON synced_messages(conversation_id, created_at);
+      CREATE TABLE IF NOT EXISTS synced_conversation_reads (
+        conversation_id text NOT NULL REFERENCES synced_conversations(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        last_read_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (conversation_id, user_id)
+      );
       CREATE TABLE IF NOT EXISTS synced_message_reactions (
         message_id text NOT NULL REFERENCES synced_messages(id) ON DELETE CASCADE,
         user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -602,13 +608,88 @@ export class ScuttlebuttDatabase {
   }
 
   async listConversations(userId: string): Promise<unknown[]> {
-    const result = await this.pool.query<{ conversation: unknown }>(
-      `SELECT COALESCE(m.conversation, c.conversation) AS conversation FROM synced_conversations c
+    const result = await this.pool.query<{
+      conversation: Record<string, unknown>;
+      conversation_id: string;
+      last_read_at: Date | null;
+    }>(
+      `SELECT c.id AS conversation_id,
+          COALESCE(m.conversation, c.conversation) AS conversation,
+          r.last_read_at
+       FROM synced_conversations c
        JOIN synced_conversation_members m ON m.conversation_id = c.id
+       LEFT JOIN synced_conversation_reads r
+         ON r.conversation_id = c.id AND r.user_id = $1
        WHERE m.user_id = $1 ORDER BY c.updated_at DESC`,
       [userId],
     );
-    return result.rows.map(({ conversation }) => conversation);
+    const profile = await this.pool.query<{ display_name: string }>(
+      'SELECT display_name FROM users WHERE id = $1',
+      [userId],
+    );
+    const displayName = profile.rows[0]?.display_name?.trim().toLowerCase() ?? '';
+
+    return Promise.all(
+      result.rows.map(async ({ conversation, conversation_id, last_read_at }) => {
+        const messages = await this.pool.query<{
+          created_at: Date;
+          id: string;
+          message: Record<string, unknown>;
+          sender_id: string;
+        }>(
+          `SELECT id, sender_id, message, created_at
+           FROM synced_messages
+           WHERE conversation_id = $1
+           ORDER BY created_at`,
+          [conversation_id],
+        );
+        const readAt = last_read_at ? new Date(last_read_at).getTime() : Number.NEGATIVE_INFINITY;
+        const messageAuthors = new Map(messages.rows.map(({ id, sender_id }) => [id, sender_id]));
+        const unread = messages.rows.filter(
+          ({ created_at, sender_id }) =>
+            sender_id !== userId && new Date(created_at).getTime() > readAt,
+        );
+        const hasDirectActivity = unread.some(({ message }) => {
+          const body = typeof message.body === 'string' ? message.body.toLowerCase() : '';
+          const mentioned = displayName ? body.includes(`@${displayName}`) : false;
+          const replyTo = message.replyTo;
+          const replyId =
+            replyTo &&
+            typeof replyTo === 'object' &&
+            'id' in replyTo &&
+            typeof replyTo.id === 'string'
+              ? replyTo.id
+              : undefined;
+          return mentioned || (replyId ? messageAuthors.get(replyId) === userId : false);
+        });
+        return {
+          ...conversation,
+          unreadCount: unread.length,
+          hasMention: hasDirectActivity,
+          ...(last_read_at ? { lastReadAt: new Date(last_read_at).toISOString() } : {}),
+        };
+      }),
+    );
+  }
+
+  async markConversationRead(userId: string, conversationId: string): Promise<void> {
+    const membership = await this.pool.query(
+      `SELECT 1 FROM synced_conversation_members WHERE conversation_id = $1 AND user_id = $2`,
+      [conversationId, userId],
+    );
+    if (membership.rowCount === 0) throw new Error('Conversation access denied.');
+    const latest = await this.pool.query<{ last_read_at: Date }>(
+      `SELECT COALESCE(MAX(created_at), now()) AS last_read_at
+       FROM synced_messages WHERE conversation_id = $1`,
+      [conversationId],
+    );
+    await this.pool.query(
+      `INSERT INTO synced_conversation_reads (conversation_id, user_id, last_read_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (conversation_id, user_id)
+       DO UPDATE SET last_read_at = EXCLUDED.last_read_at`,
+      [conversationId, userId, latest.rows[0]?.last_read_at ?? new Date()],
+    );
   }
 
   async listMessages(userId: string, conversationId: string): Promise<unknown[]> {
@@ -692,8 +773,8 @@ export class ScuttlebuttDatabase {
           ...((current.reactions as Record<string, number> | undefined) ?? {}),
         };
         const currentReactionUsers = {
-          ...((current.reactionUsers as Record<string, Array<{ id: string; name: string }>> | undefined) ??
-            {}),
+          ...((current.reactionUsers as
+            Record<string, Array<{ id: string; name: string }>> | undefined) ?? {}),
         };
 
         const existing = await client.query(

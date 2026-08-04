@@ -163,6 +163,43 @@ img {
   pointer-events: none;
 }
 
+.notification-marker {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.server-mark > .notification-marker {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+}
+
+.notification-marker-activity {
+  display: block;
+  width: 0;
+  height: 0;
+  border-right: 8px solid transparent;
+  border-bottom: 13px solid #f4f5f7;
+  border-left: 8px solid transparent;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 55%));
+  transform: rotate(45deg) scale(0.8);
+}
+
+.notification-marker-direct {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border: 2px solid var(--sidebar);
+  border-radius: 50%;
+  color: #fff;
+  background: #ed4245;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 35%);
+}
+
 .server-mark:hover {
   color: #eef2fb;
   border-radius: 14px;
@@ -621,6 +658,16 @@ img {
   font-size: 0.62rem;
 }
 
+.dm-button-unread > span:nth-child(2) {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.dm-button > .dm-mention-count {
+  color: #fff;
+  background: #ed4245;
+}
+
 .dm-button > small {
   color: var(--subtle);
   font-size: 0.62rem;
@@ -699,6 +746,29 @@ img {
 .channel-button-active {
   color: #eef1fb;
   background: #2a355c;
+}
+
+.channel-button-unread {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.channel-button-unread span:nth-child(2) {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.channel-button > .notification-marker {
+  margin-left: 4px;
+  flex: 0 0 auto;
+}
+
+.channel-button > .notification-marker-activity {
+  transform: rotate(45deg) scale(0.55);
+}
+
+.voice-channel-name > .notification-marker {
+  margin-left: 2px;
 }
 
 .server-profile-themed .channel-button-active {
@@ -1297,6 +1367,36 @@ img {
   padding: 18px 22px 8px;
   scrollbar-color: #343d4d transparent;
   scrollbar-width: thin;
+}
+
+.new-messages-banner {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -2px 0 12px;
+  padding: 7px 10px 7px 13px;
+  border-radius: 7px;
+  color: #fff;
+  background: #5865f2;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 18%);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.new-messages-banner button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.new-messages-banner button:hover {
+  text-decoration: underline;
 }
 
 .forum-view {

@@ -74,7 +74,7 @@ function readAuthSession(): AuthSession | null {
   try {
     const raw = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
     if (!raw) return null;
-    const stored = JSON.parse(raw) as Partial<StoredAuthSession>;
+    const stored = JSON.parse(raw) as Partial<AuthSession>;
     const user = parseStoredUser(stored.user);
     if (!user || typeof stored.expiresAt !== 'number' || stored.expiresAt <= Date.now()) {
       window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);

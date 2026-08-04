@@ -13,6 +13,8 @@ export interface Conversation {
   preview: string;
   updatedAt: string;
   unreadCount: number;
+  hasMention?: boolean;
+  lastReadAt?: string;
   encrypted: boolean;
   members: number;
   categoryId?: string;
@@ -422,6 +424,8 @@ export function createDemoMessagingRepository(user?: {
       const conversation = conversations.find((candidate) => candidate.id === conversationId);
       if (conversation) {
         conversation.unreadCount = 0;
+        conversation.hasMention = false;
+        conversation.lastReadAt = new Date().toISOString();
       }
     },
 
@@ -544,8 +548,8 @@ export function createSyncedMessagingRepository(
       });
     },
 
-    async markRead() {
-      return undefined;
+    async markRead(conversationId) {
+      await syncRequest('/api/sync/messages/read', credential, { conversationId });
     },
 
     async setTyping() {
