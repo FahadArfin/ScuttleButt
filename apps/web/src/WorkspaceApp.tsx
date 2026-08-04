@@ -683,9 +683,15 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
       note: 'You',
       status: publicPresenceStatus(profile.presence),
     };
+    const channelMembers =
+      activeSurface === 'groups' && activeGroup && selectedChannel
+        ? members.filter((member) =>
+            canViewWorkspaceChannel(activeGroup, selectedChannel, member.id),
+          )
+        : members;
     const candidates =
       activeSurface === 'groups'
-        ? members
+        ? channelMembers
         : [
             localCandidate,
             ...friendState.friends.map((friend) => ({
@@ -701,11 +707,13 @@ export function WorkspaceApp({ repository: repositoryProp, user }: WorkspaceAppP
     );
   }, [
     activeSurface,
+    activeGroup,
     friendState.friends,
     members,
     profile.avatar,
     profile.displayName,
     profile.presence,
+    selectedChannel,
     user.id,
   ]);
   const availableSounds = useMemo(() => groups.flatMap(({ sounds = [] }) => sounds), [groups]);

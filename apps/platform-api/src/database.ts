@@ -71,6 +71,11 @@ export interface MessagePushTarget {
 }
 
 const FRIEND_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
 
 export class ScuttlebuttDatabase {
   readonly pool: Pool;
@@ -478,15 +483,35 @@ export class ScuttlebuttDatabase {
   }
 
   async getWorkspace(userId: string): Promise<SyncedWorkspace | null> {
-    const [result, shared] = await Promise.all([
+    const [result, shared, sharedMembers] = await Promise.all([
       this.pool.query<{ dms: unknown[]; groups: Record<string, unknown>[] }>(
         'SELECT groups, dms FROM user_workspace_state WHERE user_id = $1',
         [userId],
       ),
-      this.pool.query<{ group_data: Record<string, unknown> }>(
-        `SELECT sg.group_data FROM synced_groups sg
+      this.pool.query<{ group_data: Record<string, unknown>; group_id: string }>(
+        `SELECT sg.id AS group_id, sg.group_data FROM synced_groups sg
          JOIN synced_group_members sgm ON sgm.group_id = sg.id
          WHERE sgm.user_id = $1 ORDER BY sg.updated_at`,
+        [userId],
+      ),
+      this.pool.query<{
+        avatar_url: string | null;
+        display_name: string;
+        group_id: string;
+        presence: string;
+        role: string;
+        user_id: string;
+      }>(
+        `SELECT sgm.group_id, sgm.user_id, sgm.role, u.display_name, u.avatar_url,
+          CASE WHEN u.presence = 'invisible' THEN 'offline' ELSE u.presence END AS presence
+         FROM synced_group_members sgm
+         JOIN synced_groups sg ON sg.id = sgm.group_id
+         JOIN users u ON u.id = sgm.user_id
+         WHERE EXISTS (
+           SELECT 1 FROM synced_group_members visible_member
+           WHERE visible_member.group_id = sgm.group_id AND visible_member.user_id = $1
+         )
+         ORDER BY sgm.group_id, u.display_name`,
         [userId],
       ),
     ]);
@@ -494,7 +519,50 @@ export class ScuttlebuttDatabase {
     if (!local && shared.rows.length === 0) return null;
     const groups = new Map<string, Record<string, unknown>>();
     for (const group of local?.groups ?? []) groups.set(String(group.id), group);
-    for (const { group_data: group } of shared.rows) groups.set(String(group.id), group);
+    for (const { group_data: group, group_id: groupId } of shared.rows) groups.set(groupId, group);
+
+    const membersByGroup = new Map<string, Record<string, unknown>[]>();
+    for (const member of sharedMembers.rows) {
+      const groupMembers = membersByGroup.get(member.group_id) ?? [];
+      groupMembers.push({
+        avatar: member.avatar_url ?? '',
+        id: member.user_id,
+        name: member.display_name,
+        note: member.role === 'owner' ? 'Owner' : 'Member',
+        status: member.presence,
+      });
+      membersByGroup.set(member.group_id, groupMembers);
+    }
+    for (const [groupId, group] of groups) {
+      const canonicalMembers = membersByGroup.get(groupId);
+      if (!canonicalMembers?.length) continue;
+      const storedMembers = Array.isArray(group.members)
+        ? group.members.filter(
+            (member): member is Record<string, unknown> =>
+              Boolean(member) && typeof member === 'object' && 'id' in member,
+          )
+        : [];
+      const storedById = new Map(
+        storedMembers
+          .filter((member) => typeof member.id === 'string')
+          .map((member) => [member.id as string, member]),
+      );
+      const ownerId = sharedMembers.rows.find(
+        (member) => member.group_id === groupId && member.role === 'owner',
+      )?.user_id;
+      groups.set(groupId, {
+        ...group,
+        ...(typeof group.ownerId === 'string' || !ownerId ? {} : { ownerId }),
+        members: canonicalMembers.map((member) => {
+          const stored = storedById.get(String(member.id));
+          return {
+            ...member,
+            ...(typeof stored?.note === 'string' ? { note: stored.note } : {}),
+            ...(Array.isArray(stored?.roleIds) ? { roleIds: stored.roleIds } : {}),
+          };
+        }),
+      });
+    }
     return { dms: local?.dms ?? [], groups: [...groups.values()] };
   }
 
@@ -516,11 +584,24 @@ export class ScuttlebuttDatabase {
           id?: unknown;
           members?: unknown;
           name?: unknown;
+          ownerId?: unknown;
         };
         if (typeof group.id !== 'string' || !group.id) continue;
         const groupName = typeof group.name === 'string' ? group.name : 'Scuttlebutt group';
-        const memberCount = Array.isArray(group.members) ? group.members.length : 1;
-
+        const memberIds = Array.from(
+          new Set([
+            userId,
+            ...(Array.isArray(group.members)
+              ? group.members
+                  .map((member) =>
+                    member && typeof member === 'object' && 'id' in member
+                      ? (member as { id?: unknown }).id
+                      : undefined,
+                  )
+                  .filter(isUuid)
+              : []),
+          ]),
+        );
         await client.query(
           `INSERT INTO synced_groups (id, owner_id, group_data) VALUES ($1, $2, $3::jsonb)
            ON CONFLICT (id) DO UPDATE SET group_data = EXCLUDED.group_data, updated_at = now()`,
@@ -531,12 +612,22 @@ export class ScuttlebuttDatabase {
            ON CONFLICT DO NOTHING`,
           [group.id, userId],
         );
+        for (const memberId of memberIds) {
+          await client.query(
+            `INSERT INTO synced_group_members (group_id, user_id, role)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (group_id, user_id) DO NOTHING`,
+            [group.id, memberId, memberId === userId ? 'owner' : 'member'],
+          );
+        }
 
         const channels = Array.isArray(group.channels) ? group.channels : [];
         for (const channelValue of channels) {
           const channel = channelValue as {
+            allowedRoleIds?: unknown;
             conversationId?: unknown;
             kind?: unknown;
+            isPrivate?: unknown;
             name?: unknown;
           };
           if (
@@ -549,6 +640,38 @@ export class ScuttlebuttDatabase {
           }
           const channelKind =
             channel.kind === 'voice' || channel.kind === 'forum' ? channel.kind : 'text';
+          const isPrivate = channel.isPrivate === true;
+          const allowedRoleIds = Array.isArray(channel.allowedRoleIds)
+            ? channel.allowedRoleIds.filter(
+                (roleId): roleId is string => typeof roleId === 'string',
+              )
+            : [];
+          const groupOwnerId =
+            typeof group.ownerId === 'string' && isUuid(group.ownerId) ? group.ownerId : userId;
+          const channelMemberIds = isPrivate
+            ? memberIds.filter((memberId) => {
+                if (memberId === groupOwnerId || allowedRoleIds.includes('everyone')) return true;
+                const member = Array.isArray(group.members)
+                  ? group.members.find(
+                      (candidate) =>
+                        candidate &&
+                        typeof candidate === 'object' &&
+                        'id' in candidate &&
+                        (candidate as { id?: unknown }).id === memberId,
+                    )
+                  : undefined;
+                const roleIds =
+                  member && typeof member === 'object' && 'roleIds' in member
+                    ? (member as { roleIds?: unknown }).roleIds
+                    : [];
+                return (
+                  Array.isArray(roleIds) &&
+                  roleIds.some(
+                    (roleId) => typeof roleId === 'string' && allowedRoleIds.includes(roleId),
+                  )
+                );
+              })
+            : memberIds;
           const conversation = {
             id: channel.conversationId,
             title: channel.name,
@@ -569,7 +692,7 @@ export class ScuttlebuttDatabase {
             updatedAt: 'Now',
             unreadCount: 0,
             encrypted: true,
-            members: memberCount,
+            members: channelMemberIds.length,
             categoryId: group.id,
             categoryName: groupName,
             channelKind,
@@ -580,13 +703,15 @@ export class ScuttlebuttDatabase {
              ON CONFLICT (id) DO UPDATE SET conversation = EXCLUDED.conversation, updated_at = now()`,
             [channel.conversationId, JSON.stringify(conversation)],
           );
-          await client.query(
-            `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
-             VALUES ($1, $2, $3::jsonb)
-             ON CONFLICT (conversation_id, user_id)
-             DO UPDATE SET conversation = EXCLUDED.conversation`,
-            [channel.conversationId, userId, JSON.stringify(conversation)],
-          );
+          for (const memberId of channelMemberIds) {
+            await client.query(
+              `INSERT INTO synced_conversation_members (conversation_id, user_id, conversation)
+               VALUES ($1, $2, $3::jsonb)
+               ON CONFLICT (conversation_id, user_id)
+               DO UPDATE SET conversation = EXCLUDED.conversation`,
+              [channel.conversationId, memberId, JSON.stringify(conversation)],
+            );
+          }
         }
       }
 
